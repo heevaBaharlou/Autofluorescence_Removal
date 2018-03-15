@@ -32,7 +32,7 @@ public class roi_measure implements PlugIn {
 
         for (int i=0; i<roiIndex.length; i++) {
             // Get masks, ROIs, and bounding rectangles
-            rois[i] = manager.getRoi(i);
+            rois[i] = manager.getRoi(roiIndex[i]);
             masks[i] = rois[i].getMask();
             boundingRectangles[i] = rois[i].getBounds();
 
