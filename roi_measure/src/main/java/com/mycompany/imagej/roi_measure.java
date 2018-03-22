@@ -1,12 +1,14 @@
 package com.mycompany.imagej;
 
 // Default Plugins
+
 import ij.IJ;
 import ij.ImagePlus;
+import ij.ImageStack;
 import ij.gui.Roi;
 import ij.plugin.PlugIn;
-import ij.process.ImageProcessor;
 import ij.plugin.frame.RoiManager;
+import ij.process.ImageProcessor;
 
 import java.awt.*;
 // import ij.plugin.frame.*;
@@ -15,10 +17,21 @@ public class roi_measure implements PlugIn {
     public void run(String arg) {
 
         /* Load in image */
+        IJ.log("Thresholding...");
         ImagePlus imp = IJ.getImage();
-        ImageProcessor ip = imp.getProcessor();
+        ImageStack is = imp.getStack();
+        ImageProcessor ip = is.getProcessor(1);
+        ImageProcessor ip2 = is.getProcessor(2);
+
+        /* Threshold to get ROIs */
+        // May need to allow user input here
+        ImagePlus toThreshold = imp.duplicate();
+        IJ.run(toThreshold, "Auto Local Threshold", "method=Niblack radius=15 parameter_1=0 parameter_2=0 white");
+        IJ.run(toThreshold, "Analyze Particles...", "size=100-10000 pixel show=Nothing clear add slice");
+        toThreshold.close();
 
         /* Get ROIs from ROI manager */
+        IJ.log("Getting ROIs...");
         RoiManager manager = RoiManager.getInstance();
         int[] roiIndex = manager.getIndexes(); // Break if length = 0 or null?
 
@@ -27,6 +40,7 @@ public class roi_measure implements PlugIn {
         ImageProcessor[] masks = new ImageProcessor[roiIndex.length];
         Roi[] rois = new Roi[roiIndex.length];
         Rectangle[] boundingRectangles = new Rectangle[roiIndex.length];
+        int[] sizes = new int[roiIndex.length];
 
         int maxSize = 0;
 
@@ -38,74 +52,98 @@ public class roi_measure implements PlugIn {
 
             // Get size of largest bounding rectangle
             // Should be a more efficient way of doing this?
-            int size = boundingRectangles[i].height * boundingRectangles[i].width;
-            if (size > maxSize) {
-                maxSize = size;
+            sizes[i] = boundingRectangles[i].height * boundingRectangles[i].width;
+            if (sizes[i] > maxSize) {
+                maxSize = sizes[i];
             }
         }
 
         /* Store ROI pixel intensities into a matrix - each ROI represented by a row */
-        double[][] pixelIntensity = new double[roiIndex.length][maxSize];
+        IJ.log("Measuring Correlation Coefficients...");
+        double[] correlationCoefficients = new double[roiIndex.length];
 
-        // Loop through ROIs
         for (int i = 0; i < roiIndex.length; i++) {
-            // IJ.log("Doing ROI:");
-            IJ.log(String.valueOf(i));
-            int count = 0;
+            double[] pixelIntensity = new double[sizes[i]];
+            double[] pixelIntensity2 = new double[sizes[i]];
+            int j = 0;
             for (int y = 0; y < boundingRectangles[i].height; y++) {
                 for (int x = 0; x < boundingRectangles[i].width; x++) {
-                    if (masks[i] == null || masks[i].getPixel(x, y) != 0) {
-                        pixelIntensity[i][count] = ip.getPixelValue(boundingRectangles[i].x + x,
-                                boundingRectangles[i].y + y);
-                        // IJ.log(String.valueOf(pixelIntensity[i][count]));
+                    if (masks[i] == null || masks[i].getPixel(x,y) != 0) {
+                        pixelIntensity[j] = ip.getPixelValue(boundingRectangles[i].x + x,
+                                                             boundingRectangles[i].y + y);
+                        pixelIntensity2[j] = ip2.getPixelValue(boundingRectangles[i].x + x,
+                                                              boundingRectangles[i].y + y);
                     } else {
-                        pixelIntensity[i][count] = -1; // -1 if outside of ROI
+                        pixelIntensity[j] = -1;
+                        pixelIntensity2[j] = -1;
                     }
-                    count = count + 1;
+                    j += 1;
                 }
             }
-            // Set all extra row entries to -1
-            for (int j = count; j < maxSize; j++) {
-                pixelIntensity[i][j] = -1; // Might be a better way to do this?
-            }
+            correlationCoefficients[i] = correlationCoefficient(pixelIntensity, pixelIntensity2);
+            IJ.log(String.valueOf(correlationCoefficients[i]));
         }
-        IJ.log("Done");
+//        double[][] pixelIntensity = new double[roiIndex.length][maxSize];
+//
+//        // Loop through ROIs
+//        for (int i = 0; i < roiIndex.length; i++) {
+//            // IJ.log("Doing ROI:");
+//            // IJ.log(String.valueOf(i));
+//            int count = 0;
+//            for (int y = 0; y < boundingRectangles[i].height; y++) {
+//                for (int x = 0; x < boundingRectangles[i].width; x++) {
+//                    if (masks[i] == null || masks[i].getPixel(x, y) != 0) {
+//                        pixelIntensity[i][count] = ip.getPixelValue(boundingRectangles[i].x + x,
+//                                boundingRectangles[i].y + y);
+//                        // IJ.log(String.valueOf(pixelIntensity[i][count]));
+//                    } else {
+//                        pixelIntensity[i][count] = -1; // -1 if outside of ROI
+//                    }
+//                    count = count + 1;
+//                }
+//            }
+//            // Set all extra row entries to -1
+//            for (int j = count; j < maxSize; j++) {
+//                pixelIntensity[i][j] = -1; // Might be a better way to do this?
+//            }
+//        }
+        IJ.log("Done!");
     }
 
-//    public static double roiMean(double[] pixelIntensity) {
-//        double sum = 0;
-//        int pixelCount = 0;
-//        for (int i = 0; i < pixelIntensity.length; i++) {
-//            if (pixelIntensity[i] != -1) {
-//                sum += pixelIntensity[i];
-//                pixelCount += 1;
-//            }
-//            return sum / pixelCount;
-//        }
-//    }
-//    public static double correlationCoefficient(double[] pixelIntensity1, double[] pixelIntensity2) {
-//        if (pixelIntensity1.length != pixelIntensity2.length) {
-//            return -1; // Should not occur, but added anyway
-//        } else {
-//            double roiMean1 = roiMean(pixelIntensity1);
-//            double roiMean2 = roiMean(pixelIntensity2);
-//            double[][] coefficientVals = new double[2][pixelIntensity1.length];
-//
-//            for (int i = 0; i < pixelIntensity1.length; i++) {
-//                coefficientVals[1][i] = pixelIntensity1[i] - roiMean1;
-//                coefficientVals[2][i] = pixelIntensity2[i] - roiMean2;
-//            }
-//
-//            double n1 = 0;
-//            double d1 = 0;
-//            double d2 = 0;
-//            for (int i = 0; i < pixelIntensity1.length; i++) {
-//                n1 += coefficientVals[1][i] * coefficientVals[2][i];
-//                d1 += coefficientVals[1][i] * coefficientVals[1][i];
-//                d2 += coefficientVals[2][i] * coefficientVals[2][i];
-//            }
-//            return n1/(sqrt(d1)*sqrt(d2));
-//
-//        }
-//    }
+    private static double roiMean(double[] pixelIntensity) {
+        double sum = 0;
+        int pixelCount = 0;
+        for (int i = 0; i < pixelIntensity.length; i++) {
+            if (pixelIntensity[i] != -1) {
+                sum += pixelIntensity[i];
+                pixelCount += 1;
+            }
+        }
+        return sum / pixelCount;
+    }
+    private static double correlationCoefficient(double[] pixelIntensity1, double[] pixelIntensity2) {
+        if (pixelIntensity1.length != pixelIntensity2.length) {
+            return -1; // Should not occur, but added anyway
+        } else {
+            double roiMean1 = roiMean(pixelIntensity1);
+            double roiMean2 = roiMean(pixelIntensity2);
+            double[][] coefficientVals = new double[2][pixelIntensity1.length];
+
+            for (int i = 0; i < pixelIntensity1.length; i++) {
+                coefficientVals[0][i] = pixelIntensity1[i] - roiMean1;
+                coefficientVals[1][i] = pixelIntensity2[i] - roiMean2;
+            }
+
+            double n1 = 0;
+            double d1 = 0;
+            double d2 = 0;
+            for (int i = 0; i < pixelIntensity1.length; i++) {
+                n1 += coefficientVals[0][i] * coefficientVals[1][i];
+                d1 += coefficientVals[0][i] * coefficientVals[0][i];
+                d2 += coefficientVals[1][i] * coefficientVals[1][i];
+            }
+            return n1/(Math.sqrt(d1)*Math.sqrt(d2));
+
+        }
+    }
 }
