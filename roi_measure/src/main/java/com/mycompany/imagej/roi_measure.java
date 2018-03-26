@@ -4,7 +4,6 @@ package com.mycompany.imagej;
 // TODO: GUI :'(
 
 // Plugins
-
 import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
@@ -23,10 +22,9 @@ public class roi_measure implements PlugIn {
     public void run(String arg) {
 
         /* Load in image */
-
         // These will be the user inputs (eventually)
-        int indexToThreshold = 2;
-        int indexSecondImage = 4; // Indices start at 1, not 0 for these values
+        int indexToThreshold = 1;
+        int indexSecondImage = 2; // Indices start at 1, not 0 for these values
         int numberDilations = 5;
         double thresholdValue = 0.6;
         String pathName = "/Users/nick/Desktop/NewImage.tif";
@@ -101,8 +99,7 @@ public class roi_measure implements PlugIn {
             }
         }
 
-        // Get autofluorescent ROIs and dilate them
-        // TODO: Not sure if this is actually working...
+        // Get Autofluorescent ROIs and dilate them
         ImageProcessor[] dilatedMasks = new ImageProcessor[autofluorescentRoiCount];
         int j = 0;
         for (int i = 0; i < roiIndex.length; i++) {
@@ -129,13 +126,13 @@ public class roi_measure implements PlugIn {
         // IJ.log(String.valueOf(median2));
 
         // Set Autofluorescence ROIs to the median
+        // TODO: Not sure if this is actually working...
         ip1.setColor(median1);
         ip2.setColor(median2);
 
-
-        for (ImageProcessor mask : dilatedMasks) {
-            ip1.fill(mask);
-            ip2.fill(mask);
+        for (int i = 0; i < j; i++) {
+            ip1.fill(dilatedMasks[i]);
+            ip2.fill(dilatedMasks[i]);
         }
 
         // Create new image
