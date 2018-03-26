@@ -4,10 +4,12 @@ package com.mycompany.imagej;
 // TODO: GUI :'(
 
 // Plugins
+
 import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
 import ij.gui.Roi;
+import ij.io.FileSaver;
 import ij.plugin.ChannelSplitter;
 import ij.plugin.PlugIn;
 import ij.plugin.frame.RoiManager;
@@ -21,12 +23,13 @@ public class roi_measure implements PlugIn {
     public void run(String arg) {
 
         /* Load in image */
-        // Indices start at 1, not 0 for these values
-        int indexToThreshold = 2;
-        int indexSecondImage = 4;
 
+        // These will be the user inputs (eventually)
+        int indexToThreshold = 2;
+        int indexSecondImage = 4; // Indices start at 1, not 0 for these values
         int numberDilations = 5;
         double thresholdValue = 0.6;
+        String pathName = "/Users/nick/Desktop/NewImage.tif";
 
         ImagePlus imp = IJ.getImage();
         ImageStack is = imp.getStack();
@@ -99,6 +102,7 @@ public class roi_measure implements PlugIn {
         }
 
         // Get autofluorescent ROIs and dilate them
+        // TODO: Not sure if this is actually working...
         ImageProcessor[] dilatedMasks = new ImageProcessor[autofluorescentRoiCount];
         int j = 0;
         for (int i = 0; i < roiIndex.length; i++) {
@@ -114,36 +118,46 @@ public class roi_measure implements PlugIn {
 
         /* Generate image with deleted Autofluorescence */
         // Get median of two images
-        IJ.log("Removing ROIs");
+        IJ.log("Removing Autofluorescence...");
         ImageStatistics is1 = ip1.getStatistics();
         ImageStatistics is2 = ip2.getStatistics();
 
         double median1 = is1.median;
         double median2 = is2.median;
 
-        IJ.log(String.valueOf(median1));
-        IJ.log(String.valueOf(median2));
+        // IJ.log(String.valueOf(median1));
+        // IJ.log(String.valueOf(median2));
 
         // Set Autofluorescence ROIs to the median
         ip1.setColor(median1);
         ip2.setColor(median2);
+
 
         for (ImageProcessor mask : dilatedMasks) {
             ip1.fill(mask);
             ip2.fill(mask);
         }
 
-        ImageStack impNew = new ImageStack();
+        // Create new image
+        // TODO: Make generated image have the same colour scheme as original image
+        ImageStack isNew = imp.createEmptyStack();
         for (int i = 0; i < imp.getImageStackSize(); i++) {
             if (i+1 == indexToThreshold) {
-                impNew.addSlice(ip1);
+                isNew.addSlice(ip1);
             } else if (i+1 == indexSecondImage) {
-                impNew.addSlice(ip2);
+                isNew.addSlice(ip2);
             } else {
-                impNew.addSlice(is.getProcessor(i+1));
+                isNew.addSlice(is.getProcessor(i+1));
             }
         }
-        // TODO: Save new image
+
+        ImagePlus impNew = new ImagePlus("NewImage", isNew);
+
+        // Save new image
+        IJ.log("Saving Image...");
+        FileSaver fs = new FileSaver(impNew);
+        fs.saveAsTiffStack(pathName);
+
         IJ.log("Done!");
     }
 
