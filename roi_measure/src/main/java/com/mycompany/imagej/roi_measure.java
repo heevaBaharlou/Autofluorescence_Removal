@@ -18,7 +18,6 @@ public class roi_measure implements PlugIn {
     public void run(String arg) {
 
         /* Load in image */
-        // May need to allow user to input which image to run threshold on
         // Indices start at 1, not 0 for these values
         int indexToThreshold = 2;
         int indexSecondImage = 4;
@@ -96,7 +95,7 @@ public class roi_measure implements PlugIn {
             }
         }
 
-        // Get Autofluorescent ROIs and dilate them
+        // Get autofluorescent ROIs and dilate them
         ImageProcessor[] dilatedMasks = new ImageProcessor[autofluorescentRoiCount];
         int j = 0;
         for (int i = 0; i < roiIndex.length; i++) {
@@ -110,18 +109,22 @@ public class roi_measure implements PlugIn {
             }
         }
 
+        // TODO: Get median of image and delete Autofluourescence
+
         IJ.log("Done!");
     }
 
     private static double roiMean(double[] pixelIntensity) {
         double sum = 0;
         int pixelCount = 0;
-        for (int i = 0; i < pixelIntensity.length; i++) {
-            if (pixelIntensity[i] != -1) {
-                sum += pixelIntensity[i];
+
+        for (double pixelValue : pixelIntensity) {
+            if (pixelValue != -1) {
+                sum += pixelValue;
                 pixelCount += 1;
             }
         }
+
         return sum / pixelCount;
     }
     private static double correlationCoefficient(double[] pixelIntensity1, double[] pixelIntensity2) {
