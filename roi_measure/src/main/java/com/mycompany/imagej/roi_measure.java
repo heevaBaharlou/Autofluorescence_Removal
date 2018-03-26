@@ -1,7 +1,10 @@
 package com.mycompany.imagej;
 
-// Default Plugins
 
+// TODO: Add description of script
+// TODO: GUI :'(
+
+// Plugins
 import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
@@ -81,7 +84,6 @@ public class roi_measure implements PlugIn {
                 }
             }
             correlationCoefficients[i] = correlationCoefficient(pixelIntensity1, pixelIntensity2);
-            // IJ.log(String.valueOf(correlationCoefficients[i]));
         }
 
         /* Dilate Autofluorescent ROI */
@@ -135,6 +137,7 @@ public class roi_measure implements PlugIn {
         IJ.log("Done!");
     }
 
+    // Calculate the mean pixel intensity of the ROI, ignoring the -1 values
     private static double roiMean(double[] pixelIntensity) {
         double sum = 0;
         int pixelCount = 0;
@@ -148,6 +151,8 @@ public class roi_measure implements PlugIn {
 
         return sum / pixelCount;
     }
+
+    // Calculate the Pearson Correlation Coefficient of an ROI between two images
     private static double correlationCoefficient(double[] pixelIntensity1, double[] pixelIntensity2) {
         if (pixelIntensity1.length != pixelIntensity2.length) {
             return -1; // Should not occur, but added anyway
