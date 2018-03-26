@@ -1,6 +1,5 @@
 package com.mycompany.imagej;
 
-
 // TODO: Add description of script
 // TODO: GUI :'(
 
@@ -25,6 +24,7 @@ public class roi_measure implements PlugIn {
         // Indices start at 1, not 0 for these values
         int indexToThreshold = 2;
         int indexSecondImage = 4;
+
         int numberDilations = 5;
         double thresholdValue = 0.6;
 
@@ -133,6 +133,16 @@ public class roi_measure implements PlugIn {
             ip2.fill(mask);
         }
 
+        ImageStack impNew = new ImageStack();
+        for (int i = 0; i < imp.getImageStackSize(); i++) {
+            if (i+1 == indexToThreshold) {
+                impNew.addSlice(ip1);
+            } else if (i+1 == indexSecondImage) {
+                impNew.addSlice(ip2);
+            } else {
+                impNew.addSlice(is.getProcessor(i+1));
+            }
+        }
         // TODO: Save new image
         IJ.log("Done!");
     }
