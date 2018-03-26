@@ -10,6 +10,7 @@ import ij.plugin.ChannelSplitter;
 import ij.plugin.PlugIn;
 import ij.plugin.frame.RoiManager;
 import ij.process.ImageProcessor;
+import ij.process.ImageStatistics;
 
 import java.awt.*;
 // import ij.plugin.frame.*;
@@ -109,8 +110,28 @@ public class roi_measure implements PlugIn {
             }
         }
 
-        // TODO: Get median of image and delete Autofluourescence
+        /* Generate image with deleted Autofluorescence */
+        // Get median of two images
+        IJ.log("Removing ROIs");
+        ImageStatistics is1 = ip1.getStatistics();
+        ImageStatistics is2 = ip2.getStatistics();
 
+        double median1 = is1.median;
+        double median2 = is2.median;
+
+        IJ.log(String.valueOf(median1));
+        IJ.log(String.valueOf(median2));
+
+        // Set Autofluorescence ROIs to the median
+        ip1.setColor(median1);
+        ip2.setColor(median2);
+
+        for (ImageProcessor mask : dilatedMasks) {
+            ip1.fill(mask);
+            ip2.fill(mask);
+        }
+
+        // TODO: Save new image
         IJ.log("Done!");
     }
 
