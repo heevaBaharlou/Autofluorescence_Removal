@@ -20,19 +20,20 @@ public class roi_measure implements PlugIn {
         /* Load in image */
         // May need to allow user to input which image to run threshold on
         // Indices start at 1, not 0 for these values
-        int indexToThreshold = 1;
-        int indexSecondImage = 2;
+        int indexToThreshold = 2;
+        int indexSecondImage = 4;
         int numberDilations = 5;
         double thresholdValue = 0.6;
 
-        IJ.log("Thresholding...");
         ImagePlus imp = IJ.getImage();
         ImageStack is = imp.getStack();
         ImageProcessor ip1 = is.getProcessor(indexToThreshold);
         ImageProcessor ip2 = is.getProcessor(indexSecondImage);
 
         /* Threshold to get ROIs */
+        IJ.log("Thresholding...");
         ImagePlus duplicate = imp.duplicate();
+        IJ.run(duplicate, "8-bit", "");
         ImagePlus[] imageSplit = ChannelSplitter.split(duplicate);
         ImagePlus toThreshold = imageSplit[indexToThreshold];
         IJ.run(toThreshold, "Auto Local Threshold", "method=Niblack radius=15 parameter_1=0 parameter_2=0 white");
