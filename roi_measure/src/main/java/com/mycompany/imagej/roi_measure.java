@@ -23,8 +23,8 @@ public class roi_measure implements PlugIn {
 
         /* Load in image */
         // These will be the user inputs (eventually)
-        int indexToThreshold = 1;
-        int indexSecondImage = 2; // Indices start at 1, not 0 for these values
+        int indexToThreshold = 2;
+        int indexSecondImage = 4; // Indices start at 1, not 0 for these values
         int numberDilations = 5;
         double thresholdValue = 0.6;
         String pathName = "/Users/nick/Desktop/NewImage.tif";
@@ -101,14 +101,17 @@ public class roi_measure implements PlugIn {
 
         // Get Autofluorescent ROIs and dilate them
         ImageProcessor[] dilatedMasks = new ImageProcessor[autofluorescentRoiCount];
+        Roi[] autofluorescentRoi = new Roi[autofluorescentRoiCount];
         int j = 0;
         for (int i = 0; i < roiIndex.length; i++) {
             if (correlationCoefficients[i] > thresholdValue) {
                 dilatedMasks[j] = masks[i];
-
+                dilatedMasks[j].invert(); // Need to invert first so that it can be dilated
+                autofluorescentRoi[j] = rois[i];
                 for (int k=0; k < numberDilations; k++) {
                     dilatedMasks[j].dilate();
                 }
+                dilatedMasks[j].invert(); // Invert back so that it can be used by fill
                 j += 1;
             }
         }
@@ -122,17 +125,13 @@ public class roi_measure implements PlugIn {
         double median1 = is1.median;
         double median2 = is2.median;
 
-        // IJ.log(String.valueOf(median1));
-        // IJ.log(String.valueOf(median2));
-
         // Set Autofluorescence ROIs to the median
-        // TODO: Not sure if this is actually working...
         ip1.setColor(median1);
         ip2.setColor(median2);
 
-        for (int i = 0; i < j; i++) {
-            ip1.fill(dilatedMasks[i]);
-            ip2.fill(dilatedMasks[i]);
+        for (int i = 0; i < autofluorescentRoiCount; i++) {
+            ip1.fill(autofluorescentRoi[i]);
+            ip2.fill(autofluorescentRoi[i]);
         }
 
         // Create new image
