@@ -1,46 +1,79 @@
 package com.mycompany.imagej;
 
 // TODO: Add description of script
-// TODO: GUI :'(
 
 // Plugins
 import ij.IJ;
 import ij.ImagePlus;
-import ij.ImageStack;
+import ij.WindowManager;
+import ij.gui.GenericDialog;
 import ij.gui.Roi;
-import ij.io.FileSaver;
-import ij.plugin.ChannelSplitter;
 import ij.plugin.PlugIn;
 import ij.plugin.frame.RoiManager;
 import ij.process.ImageProcessor;
 import ij.process.ImageStatistics;
 
 import java.awt.*;
+
+// import ij.plugin.ChannelSplitter;
 // import ij.plugin.frame.*;
 
 public class roi_measure implements PlugIn {
+
+    private static String[] autoLocalThresholdMethod = {"Bernsen", "Contrast", "Mean", "Median", "MidGrey", "Niblack",
+                                                        "Otsu", "Phansalkar", "Sauvola"};
+
     public void run(String arg) {
 
-        /* Load in image */
-        // These will be the user inputs (eventually)
-        int indexToThreshold = 2;
-        int indexSecondImage = 4; // Indices start at 1, not 0 for these values
-        int numberDilations = 5;
-        double thresholdValue = 0.6;
-        String pathName = "/Users/nick/Desktop/NewImage.tif";
+        /* GUI */
+        int[] wList = WindowManager.getIDList();
+        if (wList == null) {
+            IJ.noImage();
+            return;
+        }
+        String[] titles = new String[wList.length];
+        for (int i=0; i<wList.length; i++) {
+            ImagePlus imp = WindowManager.getImage(wList[i]);
+            if (imp != null)
+                titles[i] = imp.getTitle();
+            else
+                titles[i] = "";
+        }
+        //String defaultItem = titles[0];
 
-        ImagePlus imp = IJ.getImage();
-        ImageStack is = imp.getStack();
-        ImageProcessor ip1 = is.getProcessor(indexToThreshold);
-        ImageProcessor ip2 = is.getProcessor(indexSecondImage);
+        GenericDialog gd = new GenericDialog("Autofluorescence Removal");
+
+        gd.addChoice("Image to Threshold:", titles, titles[0]);
+        gd.addChoice("Second Image:", titles, titles[0]);
+        gd.addChoice("Method:", autoLocalThresholdMethod, "Niblack");
+        gd.addNumericField("Number of Dilations:", 1, 0);
+        gd.addNumericField("Threshold Value:", 0.5, 2);
+
+        gd.showDialog();
+        if (gd.wasCanceled())
+            return;
+
+        // Obtain values from GUI
+        int index1 = gd.getNextChoiceIndex();
+        int index2 = gd.getNextChoiceIndex();
+        int methodIndex = gd.getNextChoiceIndex();
+        int numberDilations = (int) gd.getNextNumber();
+        int thresholdValue = (int) gd.getNextNumber();
+
+//        String pathName = "/Users/nick/Desktop/"; // Need to allow user to select folder
+
+        /* Load in images */
+        ImagePlus imp1 = WindowManager.getImage(wList[index1]);
+        ImagePlus imp2 = WindowManager.getImage(wList[index2]);
+        ImageProcessor ip1 = imp1.getProcessor();
+        ImageProcessor ip2 = imp2.getProcessor();
 
         /* Threshold to get ROIs */
         IJ.log("Thresholding...");
-        ImagePlus duplicate = imp.duplicate();
-        IJ.run(duplicate, "8-bit", "");
-        ImagePlus[] imageSplit = ChannelSplitter.split(duplicate);
-        ImagePlus toThreshold = imageSplit[indexToThreshold];
-        IJ.run(toThreshold, "Auto Local Threshold", "method=Niblack radius=15 parameter_1=0 parameter_2=0 white");
+        ImagePlus toThreshold = imp1.duplicate();
+        IJ.run(toThreshold, "8-bit", "");
+        IJ.run(toThreshold, "Auto Local Threshold", "method=" + autoLocalThresholdMethod[methodIndex] +
+                            " radius=15 parameter_1=0 parameter_2=0 white");
         IJ.run(toThreshold, "Analyze Particles...", "size=100-10000 pixel show=Nothing clear add slice");
         toThreshold.close();
 
@@ -134,27 +167,19 @@ public class roi_measure implements PlugIn {
             ip2.fill(autofluorescentRoi[i]);
         }
 
-        // Create new image
-        // TODO: Make generated image have the same colour scheme as original image
-        ImageStack isNew = imp.createEmptyStack();
-        for (int i = 0; i < imp.getImageStackSize(); i++) {
-            if (i+1 == indexToThreshold) {
-                isNew.addSlice(ip1);
-            } else if (i+1 == indexSecondImage) {
-                isNew.addSlice(ip2);
-            } else {
-                isNew.addSlice(is.getProcessor(i+1));
-            }
-        }
+        ImagePlus impNew1 = new ImagePlus(titles[index1] + "_AF_Removed", ip1);
+        ImagePlus impNew2 = new ImagePlus(titles[index2] + "_AF_Removed", ip2);
 
-        ImagePlus impNew = new ImagePlus("NewImage", isNew);
+        impNew1.show();
+        impNew2.show();
 
-        // Save new image
-        IJ.log("Saving Image...");
-        FileSaver fs = new FileSaver(impNew);
-        fs.saveAsTiffStack(pathName);
+//        // Save new images
+//        IJ.log("Saving Images...");
+//        FileSaver fs1 = new FileSaver(impNew1);
+//        FileSaver fs2 = new FileSaver(impNew2);
+//        fs1.saveAsTiff(pathName + titles[index1] + "_AF_Removed.tif");
+//        fs2.saveAsTiff(pathName + titles[index2] + "_AF_Removed.tif");
 
-        IJ.log("Done!");
     }
 
     // Calculate the mean pixel intensity of the ROI, ignoring the -1 values
@@ -195,7 +220,7 @@ public class roi_measure implements PlugIn {
                 d1 += coefficientVals[0][i] * coefficientVals[0][i];
                 d2 += coefficientVals[1][i] * coefficientVals[1][i];
             }
-            return n1/(Math.sqrt(d1)*Math.sqrt(d2));
+            return n1/(Math.sqrt(d1) * Math.sqrt(d2));
         }
     }
 }
