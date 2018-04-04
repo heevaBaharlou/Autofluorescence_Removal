@@ -1,6 +1,7 @@
 package com.mycompany.imagej;
 
 // TODO: Add description of script
+// TODO: Add contingencies
 
 // Plugins
 import ij.IJ;
@@ -48,7 +49,6 @@ public class roi_measure implements PlugIn {
         gd.addChoice("Method:", autoLocalThresholdMethod, "Niblack");
         gd.addNumericField("Number of Dilations:", 1, 0);
         gd.addNumericField("Threshold Value:", 0.5, 2);
-
         gd.showDialog();
         if (gd.wasCanceled())
             return;
@@ -58,18 +58,23 @@ public class roi_measure implements PlugIn {
         int index2 = gd.getNextChoiceIndex();
         int methodIndex = gd.getNextChoiceIndex();
         int numberDilations = (int) gd.getNextNumber();
-        int thresholdValue = (int) gd.getNextNumber();
+        double thresholdValue = gd.getNextNumber();
 
 //        String pathName = "/Users/nick/Desktop/"; // Need to allow user to select folder
 
         /* Load in images */
         ImagePlus imp1 = WindowManager.getImage(wList[index1]);
         ImagePlus imp2 = WindowManager.getImage(wList[index2]);
-        ImageProcessor ip1 = imp1.getProcessor();
-        ImageProcessor ip2 = imp2.getProcessor();
+
+        ImagePlus imp1Removed = imp1.duplicate();
+        ImagePlus imp2Removed = imp2.duplicate();
+        ImageProcessor ip1 = imp1Removed.getProcessor();
+        ImageProcessor ip2 = imp2Removed.getProcessor();
 
         /* Threshold to get ROIs */
-        IJ.log("Thresholding...");
+        IJ.showStatus("Thresholding...");
+        IJ.showProgress(1,6);
+
         ImagePlus toThreshold = imp1.duplicate();
         IJ.run(toThreshold, "8-bit", "");
         IJ.run(toThreshold, "Auto Local Threshold", "method=" + autoLocalThresholdMethod[methodIndex] +
@@ -78,7 +83,9 @@ public class roi_measure implements PlugIn {
         toThreshold.close();
 
         /* Get ROIs from ROI manager */
-        IJ.log("Getting ROIs...");
+        IJ.showStatus("Getting ROIs...");
+        IJ.showProgress(2,6);
+
         RoiManager rm = RoiManager.getInstance();
         int[] roiIndex = rm.getIndexes(); // Break if length = 0 or null?
 
@@ -98,7 +105,9 @@ public class roi_measure implements PlugIn {
         }
 
         /* Store Correlation Coefficients of ROIs */
-        IJ.log("Measuring Correlation Coefficients...");
+        IJ.showStatus("Measuring Correlation Coefficients...");
+        IJ.showProgress(3,6);
+
         double[] correlationCoefficients = new double[roiIndex.length];
 
         for (int i = 0; i < roiIndex.length; i++) {
@@ -121,7 +130,8 @@ public class roi_measure implements PlugIn {
         }
 
         /* Dilate Autofluorescent ROI */
-        IJ.log("Dilating ROIs...");
+        IJ.showStatus("Dilating ROIs...");
+        IJ.showProgress(4,6);
 
         // Count number of Autofluorescent ROIs
         // Might not need this - inefficient
@@ -151,7 +161,9 @@ public class roi_measure implements PlugIn {
 
         /* Generate image with deleted Autofluorescence */
         // Get median of two images
-        IJ.log("Removing Autofluorescence...");
+        IJ.showStatus("Removing Autofluorescence...");
+        IJ.showProgress(5,6);
+
         ImageStatistics is1 = ip1.getStatistics();
         ImageStatistics is2 = ip2.getStatistics();
 
@@ -173,6 +185,12 @@ public class roi_measure implements PlugIn {
         impNew1.show();
         impNew2.show();
 
+        imp1Removed.close();
+        imp2Removed.close();
+
+        IJ.showStatus("Done!");
+        IJ.showProgress(6,6);
+
 //        // Save new images
 //        IJ.log("Saving Images...");
 //        FileSaver fs1 = new FileSaver(impNew1);
@@ -182,7 +200,7 @@ public class roi_measure implements PlugIn {
 
     }
 
-    // Calculate the mean pixel intensity of the ROI, ignoring the -1 values
+    /* Calculate the mean pixel intensity of the ROI, ignoring the -1 values */
     private static double roiMean(double[] pixelIntensity) {
         double sum = 0;
         int pixelCount = 0;
@@ -197,7 +215,7 @@ public class roi_measure implements PlugIn {
         return sum / pixelCount;
     }
 
-    // Calculate the Pearson Correlation Coefficient of an ROI between two images
+    /* Calculate the Pearson Correlation Coefficient of an ROI between two images */
     private static double correlationCoefficient(double[] pixelIntensity1, double[] pixelIntensity2) {
         if (pixelIntensity1.length != pixelIntensity2.length) {
             return -1; // Should not occur, but added anyway
