@@ -144,16 +144,25 @@ public class roi_measure implements PlugIn {
                 bpDilatedMask.setColor(0);
                 bpDilatedMask.fill();
 
-                // Dilate Mask
-                ByteProcessor originalMask = masks[i].convertToByteProcessor();
-                ByteProcessor increasedAreaMask = new ByteProcessor(boundingRectangles[i].height + 2*increaseSize, boundingRectangles[i].width + 2*increaseSize);
-                increasedAreaMask.insert(originalMask, increaseSize, increaseSize);
-
-                for (int j = 0; j < numberDilations; j++) {
-                    increasedAreaMask.dilate(1, 0);
+                // Create Smaller Mask
+                ByteProcessor originalMask = new ByteProcessor(boundingRectangles[i].width, boundingRectangles[i].height);
+                if (masks[i] != null) {
+                    originalMask = masks[i].convertToByteProcessor();
+                } else {
+                    originalMask.setColor(255);
+                    originalMask.fill();
                 }
 
-                bpDilatedMask.insert(increasedAreaMask, boundingRectangles[i].x - increaseSize, boundingRectangles[i].y - increaseSize);
+                ByteProcessor smallerMask = new ByteProcessor(boundingRectangles[i].width + 2*increaseSize, boundingRectangles[i].height + 2*increaseSize);
+                smallerMask.insert(originalMask, increaseSize, increaseSize);
+
+                // Dilate Smaller Mask
+                for (int j = 0; j < numberDilations; j++) {
+                    smallerMask.dilate(1, 0);
+                }
+
+                // Creates Full Image Mask
+                bpDilatedMask.insert(smallerMask, boundingRectangles[i].x - increaseSize, boundingRectangles[i].y - increaseSize);
 
                 // Remove Autofluorescence
                 ip1.setColor(is1.median);
