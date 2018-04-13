@@ -4,6 +4,7 @@ package com.mycompany.imagej;
 // TODO: Add contingencies
 
 // Plugins
+
 import ij.IJ;
 import ij.ImagePlus;
 import ij.WindowManager;
@@ -11,6 +12,7 @@ import ij.gui.GenericDialog;
 import ij.gui.Roi;
 import ij.plugin.PlugIn;
 import ij.plugin.frame.RoiManager;
+import ij.process.ByteProcessor;
 import ij.process.ImageProcessor;
 import ij.process.ImageStatistics;
 
@@ -21,7 +23,7 @@ import java.awt.*;
 
 public class roi_measure implements PlugIn {
 
-    private static String[] autoLocalThresholdMethod = {"Bernsen", "Contrast", "Mean", "Median", "MidGrey", "Niblack",
+    private static String[] autoLocalThresholdMethod = {"Do not perform auto-local thresholding", "Bernsen", "Contrast", "Mean", "Median", "MidGrey", "Niblack",
                                                         "Otsu", "Phansalkar", "Sauvola"};
 
     public void run(String arg) {
@@ -40,15 +42,14 @@ public class roi_measure implements PlugIn {
             else
                 titles[i] = "";
         }
-        //String defaultItem = titles[0];
 
         GenericDialog gd = new GenericDialog("Autofluorescence Removal");
 
-        gd.addChoice("Image to Threshold:", titles, titles[0]);
-        gd.addChoice("Second Image:", titles, titles[0]);
+        gd.addChoice("Image 1:", titles, titles[0]);
+        gd.addChoice("Image 2:", titles, titles[0]);
         gd.addChoice("Method:", autoLocalThresholdMethod, "Niblack");
-        gd.addNumericField("Number of Dilations:", 1, 0);
-        gd.addNumericField("Threshold Value:", 0.5, 2);
+        gd.addNumericField("Number of Dilations:", 3, 0);
+        gd.addNumericField("AF Cutoff", 0.60, 2);
         gd.showDialog();
         if (gd.wasCanceled())
             return;
@@ -72,19 +73,19 @@ public class roi_measure implements PlugIn {
         ImageProcessor ip2 = imp2Removed.getProcessor();
 
         /* Threshold to get ROIs */
-        IJ.showStatus("Thresholding...");
-        IJ.showProgress(1,6);
+        if(methodIndex != 0){
+            IJ.showStatus("Thresholding...");
 
-        ImagePlus toThreshold = imp1.duplicate();
-        IJ.run(toThreshold, "8-bit", "");
-        IJ.run(toThreshold, "Auto Local Threshold", "method=" + autoLocalThresholdMethod[methodIndex] +
-                            " radius=15 parameter_1=0 parameter_2=0 white");
-        IJ.run(toThreshold, "Analyze Particles...", "size=100-10000 pixel show=Nothing clear add slice");
-        toThreshold.close();
+            ImagePlus impToThreshold = imp1.duplicate();
+            IJ.run(impToThreshold, "8-bit", "");
+            IJ.run(impToThreshold, "Auto Local Threshold", "method=" + autoLocalThresholdMethod[methodIndex] +
+                    " radius=15 parameter_1=0 parameter_2=0 white");
+            IJ.run(impToThreshold, "Analyze Particles...", "size=100-10000 pixel show=Nothing clear add slice");
+            impToThreshold.close();
+        }
 
         /* Get ROIs from ROI manager */
         IJ.showStatus("Getting ROIs...");
-        IJ.showProgress(2,6);
 
         RoiManager rm = RoiManager.getInstance();
         int[] roiIndex = rm.getIndexes(); // Break if length = 0 or null?
@@ -106,7 +107,6 @@ public class roi_measure implements PlugIn {
 
         /* Store Correlation Coefficients of ROIs */
         IJ.showStatus("Measuring Correlation Coefficients...");
-        IJ.showProgress(3,6);
 
         double[] correlationCoefficients = new double[roiIndex.length];
 
@@ -129,55 +129,35 @@ public class roi_measure implements PlugIn {
             correlationCoefficients[i] = correlationCoefficient(pixelIntensity1, pixelIntensity2);
         }
 
-        /* Dilate Autofluorescent ROI */
-        IJ.showStatus("Dilating ROIs...");
-        IJ.showProgress(4,6);
-
-        // Count number of Autofluorescent ROIs
-        // Might not need this - inefficient
-        int autofluorescentRoiCount = 0;
-        for (int i = 0; i < roiIndex.length; i++) {
-            if (correlationCoefficients[i] > thresholdValue) {
-                autofluorescentRoiCount += 1;
-            }
-        }
-
-        // Get Autofluorescent ROIs and dilate them
-        ImageProcessor[] dilatedMasks = new ImageProcessor[autofluorescentRoiCount];
-        Roi[] autofluorescentRoi = new Roi[autofluorescentRoiCount];
-        int j = 0;
-        for (int i = 0; i < roiIndex.length; i++) {
-            if (correlationCoefficients[i] > thresholdValue) {
-                dilatedMasks[j] = masks[i];
-                dilatedMasks[j].invert(); // Need to invert first so that it can be dilated
-                autofluorescentRoi[j] = rois[i];
-                for (int k=0; k < numberDilations; k++) {
-                    dilatedMasks[j].dilate();
-                }
-                dilatedMasks[j].invert(); // Invert back so that it can be used by fill
-                j += 1;
-            }
-        }
-
-        /* Generate image with deleted Autofluorescence */
-        // Get median of two images
+        /* Remove Autofluorescent ROIs */
         IJ.showStatus("Removing Autofluorescence...");
-        IJ.showProgress(5,6);
-
         ImageStatistics is1 = ip1.getStatistics();
         ImageStatistics is2 = ip2.getStatistics();
+        
+        ImagePlus impDilatedMask = imp1.duplicate();
+        ImageProcessor ipDilatedMask = impDilatedMask.getProcessor();
+        ByteProcessor bpDilatedMask = ipDilatedMask.convertToByteProcessor();
 
-        double median1 = is1.median;
-        double median2 = is2.median;
+        for (int i = 0; i < roiIndex.length; i++) {
+            if (correlationCoefficients[i] > thresholdValue) {
+                // Create Mask
+                bpDilatedMask.setColor(0);
+                bpDilatedMask.fill();
+                bpDilatedMask.insert(masks[i], boundingRectangles[i].x, boundingRectangles[i].y);
 
-        // Set Autofluorescence ROIs to the median
-        ip1.setColor(median1);
-        ip2.setColor(median2);
+                // Dilate Mask
+                for (int j = 0; j < numberDilations; j++) {
+                    bpDilatedMask.dilate(1, 0);
+                }
 
-        for (int i = 0; i < autofluorescentRoiCount; i++) {
-            ip1.fill(autofluorescentRoi[i]);
-            ip2.fill(autofluorescentRoi[i]);
+                // Remove Autofluorescence
+                ip1.setColor(is1.median);
+                ip2.setColor(is2.median);
+                ip1.fill(bpDilatedMask);
+                ip2.fill(bpDilatedMask);
+            }
         }
+        impDilatedMask.close();
 
         ImagePlus impNew1 = new ImagePlus(titles[index1] + "_AF_Removed", ip1);
         ImagePlus impNew2 = new ImagePlus(titles[index2] + "_AF_Removed", ip2);
@@ -189,15 +169,6 @@ public class roi_measure implements PlugIn {
         imp2Removed.close();
 
         IJ.showStatus("Done!");
-        IJ.showProgress(6,6);
-
-//        // Save new images
-//        IJ.log("Saving Images...");
-//        FileSaver fs1 = new FileSaver(impNew1);
-//        FileSaver fs2 = new FileSaver(impNew2);
-//        fs1.saveAsTiff(pathName + titles[index1] + "_AF_Removed.tif");
-//        fs2.saveAsTiff(pathName + titles[index2] + "_AF_Removed.tif");
-
     }
 
     /* Calculate the mean pixel intensity of the ROI, ignoring the -1 values */
@@ -226,17 +197,21 @@ public class roi_measure implements PlugIn {
             double[][] coefficientVals = new double[2][pixelIntensity1.length];
 
             for (int i = 0; i < pixelIntensity1.length; i++) {
-                coefficientVals[0][i] = pixelIntensity1[i] - roiMean1;
-                coefficientVals[1][i] = pixelIntensity2[i] - roiMean2;
+                if (pixelIntensity1[i] != -1) {
+                    coefficientVals[0][i] = pixelIntensity1[i] - roiMean1;
+                    coefficientVals[1][i] = pixelIntensity2[i] - roiMean2;
+                }
             }
 
             double n1 = 0;
             double d1 = 0;
             double d2 = 0;
             for (int i = 0; i < pixelIntensity1.length; i++) {
-                n1 += coefficientVals[0][i] * coefficientVals[1][i];
-                d1 += coefficientVals[0][i] * coefficientVals[0][i];
-                d2 += coefficientVals[1][i] * coefficientVals[1][i];
+                if (pixelIntensity1[i] != -1) {
+                    n1 += coefficientVals[0][i] * coefficientVals[1][i];
+                    d1 += coefficientVals[0][i] * coefficientVals[0][i];
+                    d2 += coefficientVals[1][i] * coefficientVals[1][i];
+                }
             }
             return n1/(Math.sqrt(d1) * Math.sqrt(d2));
         }
