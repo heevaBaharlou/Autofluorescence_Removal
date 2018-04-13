@@ -4,7 +4,6 @@ package com.mycompany.imagej;
 // TODO: Add contingencies
 
 // Plugins
-
 import ij.IJ;
 import ij.ImagePlus;
 import ij.WindowManager;
@@ -46,7 +45,7 @@ public class roi_measure implements PlugIn {
         GenericDialog gd = new GenericDialog("Autofluorescence Removal");
 
         gd.addChoice("Image 1:", titles, titles[0]);
-        gd.addChoice("Image 2:", titles, titles[0]);
+        gd.addChoice("Image 2:", titles, titles[1]);
         gd.addChoice("Method:", autoLocalThresholdMethod, "Niblack");
         gd.addNumericField("Number of Dilations:", 3, 0);
         gd.addNumericField("AF Cutoff", 0.60, 2);
@@ -133,22 +132,28 @@ public class roi_measure implements PlugIn {
         IJ.showStatus("Removing Autofluorescence...");
         ImageStatistics is1 = ip1.getStatistics();
         ImageStatistics is2 = ip2.getStatistics();
-        
+
         ImagePlus impDilatedMask = imp1.duplicate();
         ImageProcessor ipDilatedMask = impDilatedMask.getProcessor();
         ByteProcessor bpDilatedMask = ipDilatedMask.convertToByteProcessor();
+        int increaseSize = numberDilations + 10;
 
         for (int i = 0; i < roiIndex.length; i++) {
             if (correlationCoefficients[i] > thresholdValue) {
-                // Create Mask
+                // Reset Mask
                 bpDilatedMask.setColor(0);
                 bpDilatedMask.fill();
-                bpDilatedMask.insert(masks[i], boundingRectangles[i].x, boundingRectangles[i].y);
 
                 // Dilate Mask
+                ByteProcessor originalMask = masks[i].convertToByteProcessor();
+                ByteProcessor increasedAreaMask = new ByteProcessor(boundingRectangles[i].height + 2*increaseSize, boundingRectangles[i].width + 2*increaseSize);
+                increasedAreaMask.insert(originalMask, increaseSize, increaseSize);
+
                 for (int j = 0; j < numberDilations; j++) {
-                    bpDilatedMask.dilate(1, 0);
+                    increasedAreaMask.dilate(1, 0);
                 }
+
+                bpDilatedMask.insert(increasedAreaMask, boundingRectangles[i].x - increaseSize, boundingRectangles[i].y - increaseSize);
 
                 // Remove Autofluorescence
                 ip1.setColor(is1.median);
