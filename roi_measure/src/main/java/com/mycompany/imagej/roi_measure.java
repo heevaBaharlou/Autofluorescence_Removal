@@ -60,8 +60,6 @@ public class roi_measure implements PlugIn {
         int numberDilations = (int) gd.getNextNumber();
         double thresholdValue = gd.getNextNumber();
 
-//        String pathName = "/Users/nick/Desktop/"; // Need to allow user to select folder
-
         /* Load in images */
         ImagePlus imp1 = WindowManager.getImage(wList[index1]);
         ImagePlus imp2 = WindowManager.getImage(wList[index2]);
@@ -173,8 +171,8 @@ public class roi_measure implements PlugIn {
         }
         impDilatedMask.close();
 
-        ImagePlus impNew1 = new ImagePlus(titles[index1] + "_AF_Removed", ip1);
-        ImagePlus impNew2 = new ImagePlus(titles[index2] + "_AF_Removed", ip2);
+        ImagePlus impNew1 = new ImagePlus(titles[index1].substring(0, titles[index1].length() - 4) + "_AF_Removed.tif", ip1);
+        ImagePlus impNew2 = new ImagePlus(titles[index2].substring(0, titles[index2].length() - 4) + "_AF_Removed.tif", ip2);
 
         impNew1.show();
         impNew2.show();
