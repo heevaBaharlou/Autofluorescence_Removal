@@ -4,40 +4,52 @@ package com.mycompany.imagej;
 // TODO: Add contingencies
 
 // Plugins
+
 import ij.IJ;
 import ij.ImagePlus;
 import ij.WindowManager;
+import ij.gui.DialogListener;
 import ij.gui.GenericDialog;
 import ij.gui.Roi;
-import ij.plugin.PlugIn;
+import ij.plugin.filter.ExtendedPlugInFilter;
+import ij.plugin.filter.PlugInFilterRunner;
 import ij.plugin.frame.RoiManager;
 import ij.process.ByteProcessor;
 import ij.process.ImageProcessor;
 import ij.process.ImageStatistics;
-
 import java.awt.*;
 
-// import ij.plugin.ChannelSplitter;
-// import ij.plugin.frame.*;
+public class roi_measure implements ExtendedPlugInFilter, DialogListener {
 
-public class roi_measure implements PlugIn {
-
-    private static String[] autoLocalThresholdMethod = {"Do not perform auto-local thresholding", "Bernsen", "Contrast", "Mean", "Median", "MidGrey", "Niblack",
+    private static String[] autoLocalThresholdMethod = {"Do not perform auto-local thresholding", "Bernsen", "Contrast",
+                                                        "Mean", "Median", "MidGrey", "Niblack",
                                                         "Otsu", "Phansalkar", "Sauvola"};
 
-    public void run(String arg) {
+    private static int[] wList;
+    private static String[] titles;
+    private static int index1;
+    private static int index2;
+    private static int methodIndex;
+    private static int numberDilations;
+    private static double thresholdValue;
+    private static int nPasses = 1;
+    private boolean previewing;
 
-        /* GUI */
-        int[] wList = WindowManager.getIDList();
+    public int setup(String arg, ImagePlus ip) {
+        return DOES_ALL;
+    }
+
+    public int showDialog(ImagePlus imp, String command, PlugInFilterRunner pfr) {
+        wList = WindowManager.getIDList();
         if (wList == null) {
             IJ.noImage();
-            return;
+            return DONE;
         }
-        String[] titles = new String[wList.length];
+        titles = new String[wList.length];
         for (int i=0; i<wList.length; i++) {
-            ImagePlus imp = WindowManager.getImage(wList[i]);
-            if (imp != null)
-                titles[i] = imp.getTitle();
+            ImagePlus ip = WindowManager.getImage(wList[i]);
+            if (ip != null)
+                titles[i] = ip.getTitle();
             else
                 titles[i] = "";
         }
@@ -49,17 +61,31 @@ public class roi_measure implements PlugIn {
         gd.addChoice("Method:", autoLocalThresholdMethod, "Niblack");
         gd.addNumericField("Number of Dilations:", 3, 0);
         gd.addNumericField("AF Cutoff", 0.60, 2);
+        gd.addPreviewCheckbox(pfr, "Preview AF ROIs");
         gd.showDialog();
         if (gd.wasCanceled())
-            return;
+            return DONE;
+        if (!dialogItemChanged(gd, null))
+            return DONE;
+        return DOES_ALL;
+    }
 
-        // Obtain values from GUI
-        int index1 = gd.getNextChoiceIndex();
-        int index2 = gd.getNextChoiceIndex();
-        int methodIndex = gd.getNextChoiceIndex();
-        int numberDilations = (int) gd.getNextNumber();
-        double thresholdValue = gd.getNextNumber();
 
+    public boolean dialogItemChanged(GenericDialog gd, AWTEvent e) {
+        index1 = gd.getNextChoiceIndex();
+        index2 = gd.getNextChoiceIndex();
+        methodIndex = gd.getNextChoiceIndex();
+        numberDilations = (int) gd.getNextNumber();
+        thresholdValue = gd.getNextNumber();
+        previewing = gd.isPreviewActive();
+        return true;
+    }
+
+    public void setNPasses(int nPasses) {
+        this.nPasses = nPasses;
+    }
+
+    public void run(ImageProcessor imp) {
         /* Load in images */
         ImagePlus imp1 = WindowManager.getImage(wList[index1]);
         ImagePlus imp2 = WindowManager.getImage(wList[index2]);
@@ -76,7 +102,7 @@ public class roi_measure implements PlugIn {
             ImagePlus impToThreshold = imp1.duplicate();
             IJ.run(impToThreshold, "8-bit", "");
             IJ.run(impToThreshold, "Auto Local Threshold", "method=" + autoLocalThresholdMethod[methodIndex] +
-                    " radius=15 parameter_1=0 parameter_2=0 white");
+                                   " radius=15 parameter_1=0 parameter_2=0 white");
             IJ.run(impToThreshold, "Analyze Particles...", "size=100-10000 pixel show=Nothing clear add slice");
             impToThreshold.close();
         }
@@ -126,6 +152,27 @@ public class roi_measure implements PlugIn {
             correlationCoefficients[i] = correlationCoefficient(pixelIntensity1, pixelIntensity2);
         }
 
+        int count = 0;
+        for (int i = 0; i < roiIndex.length; i++) {
+            if (correlationCoefficients[i] > thresholdValue) {
+                count += 1;
+            }
+        }
+
+        Roi[] afROI = new Roi[count];
+        int i = 0;
+        for (int j = 0; j < roiIndex.length; j++) {
+            if (correlationCoefficients[j] > thresholdValue)
+                afROI[i] = rois[j];
+        }
+
+        if (previewing) {
+            for (i = 0; i < count; i++) {
+                imp1.setRoi(afROI[i]);
+                imp2.setRoi(afROI[i]);
+            }
+        }
+
         /* Remove Autofluorescent ROIs */
         IJ.showStatus("Removing Autofluorescence...");
         ImageStatistics is1 = ip1.getStatistics();
@@ -136,7 +183,7 @@ public class roi_measure implements PlugIn {
         ByteProcessor bpDilatedMask = ipDilatedMask.convertToByteProcessor();
         int increaseSize = numberDilations + 10;
 
-        for (int i = 0; i < roiIndex.length; i++) {
+        for (i = 0; i < roiIndex.length; i++) {
             if (correlationCoefficients[i] > thresholdValue) {
                 // Reset Mask
                 bpDilatedMask.setColor(0);
@@ -151,7 +198,8 @@ public class roi_measure implements PlugIn {
                     originalMask.fill();
                 }
 
-                ByteProcessor smallerMask = new ByteProcessor(boundingRectangles[i].width + 2*increaseSize, boundingRectangles[i].height + 2*increaseSize);
+                ByteProcessor smallerMask = new ByteProcessor(boundingRectangles[i].width + 2*increaseSize,
+                                                              boundingRectangles[i].height + 2*increaseSize);
                 smallerMask.insert(originalMask, increaseSize, increaseSize);
 
                 // Dilate Smaller Mask
