@@ -48,6 +48,7 @@ public class roi_measure implements PlugIn {
         gd.addChoice("Image 2:", titles, titles[1]);
         gd.addChoice("Method:", autoLocalThresholdMethod, "Niblack");
         gd.addNumericField("Number of Dilations:", 3, 0);
+        gd.addNumericField("Number of Smooths:", 1, 0);
         gd.addNumericField("AF Cutoff", 0.60, 2);
         gd.showDialog();
         if (gd.wasCanceled())
@@ -58,11 +59,23 @@ public class roi_measure implements PlugIn {
         int index2 = gd.getNextChoiceIndex();
         int methodIndex = gd.getNextChoiceIndex();
         int numberDilations = (int) gd.getNextNumber();
+        int numberSmooths = (int) gd.getNextNumber();
         double thresholdValue = gd.getNextNumber();
 
         /* Load in images */
         ImagePlus imp1 = WindowManager.getImage(wList[index1]);
         ImagePlus imp2 = WindowManager.getImage(wList[index2]);
+
+        ImagePlus imp1Smoothed = imp1.duplicate();
+        ImagePlus imp2Smoothed = imp1.duplicate();
+
+        for (int i = 0; i < numberSmooths; i ++) {
+            IJ.run(imp1Smoothed, "Smooth", "");
+            IJ.run(imp2Smoothed, "Smooth", "");
+        }
+
+        ImageProcessor ip1Smoothed = imp1Smoothed.getProcessor();
+        ImageProcessor ip2Smoothed = imp2Smoothed.getProcessor();
 
         ImagePlus imp1Removed = imp1.duplicate();
         ImagePlus imp2Removed = imp2.duplicate();
@@ -76,7 +89,7 @@ public class roi_measure implements PlugIn {
             ImagePlus impToThreshold = imp1.duplicate();
             IJ.run(impToThreshold, "8-bit", "");
             IJ.run(impToThreshold, "Auto Local Threshold", "method=" + autoLocalThresholdMethod[methodIndex] +
-                    " radius=15 parameter_1=0 parameter_2=0 white");
+                                   " radius=15 parameter_1=0 parameter_2=0 white");
             IJ.run(impToThreshold, "Analyze Particles...", "size=100-10000 pixel show=Nothing clear add slice");
             impToThreshold.close();
         }
@@ -114,8 +127,8 @@ public class roi_measure implements PlugIn {
             for (int y = 0; y < boundingRectangles[i].height; y++) {
                 for (int x = 0; x < boundingRectangles[i].width; x++) {
                     if (masks[i] == null || masks[i].getPixel(x,y) != 0) {
-                        pixelIntensity1[j] = ip1.getPixelValue(boundingRectangles[i].x + x, boundingRectangles[i].y + y);
-                        pixelIntensity2[j] = ip2.getPixelValue(boundingRectangles[i].x + x, boundingRectangles[i].y + y);
+                        pixelIntensity1[j] = ip1Smoothed.getPixelValue(boundingRectangles[i].x + x, boundingRectangles[i].y + y);
+                        pixelIntensity2[j] = ip2Smoothed.getPixelValue(boundingRectangles[i].x + x, boundingRectangles[i].y + y);
                     } else {
                         pixelIntensity1[j] = -1;
                         pixelIntensity2[j] = -1;
