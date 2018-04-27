@@ -29,11 +29,20 @@ public class roi_measure implements ExtendedPlugInFilter, DialogListener {
     private static String[] titles;
     private static int index1;
     private static int index2;
-    private static int methodIndex;
+    // private static int methodIndex;
     private static int numberDilations;
     private static double thresholdValue;
-    private static int nPasses = 1;
+    // private static int nPasses = 2;
     private boolean previewing;
+    private static ImagePlus imp1;
+    private static ImagePlus imp2;
+    private static ImagePlus imp1Removed;
+    private static ImagePlus imp2Removed;
+    private static ImageProcessor ip1;
+    private static ImageProcessor ip2;
+    private static RoiManager rm;
+    private static int[] roiIndex;
+    private static boolean preview;
 
     public int setup(String arg, ImagePlus ip) {
         return DOES_ALL;
@@ -62,38 +71,34 @@ public class roi_measure implements ExtendedPlugInFilter, DialogListener {
         gd.addNumericField("Number of Dilations:", 3, 0);
         gd.addNumericField("AF Cutoff", 0.60, 2);
         gd.addPreviewCheckbox(pfr, "Preview AF ROIs");
+        previewing = true;
+        // gd.addHelp(IJ.URL+"/docs/menus/process.html#find-maxima");
         gd.showDialog();
         if (gd.wasCanceled())
             return DONE;
+        previewing = false;
         if (!dialogItemChanged(gd, null))
             return DONE;
-        return DOES_ALL;
+        return DOES_ALL|KEEP_PREVIEW;
     }
 
 
     public boolean dialogItemChanged(GenericDialog gd, AWTEvent e) {
         index1 = gd.getNextChoiceIndex();
         index2 = gd.getNextChoiceIndex();
-        methodIndex = gd.getNextChoiceIndex();
+        int methodIndex = gd.getNextChoiceIndex();
         numberDilations = (int) gd.getNextNumber();
         thresholdValue = gd.getNextNumber();
         previewing = gd.isPreviewActive();
-        return true;
-    }
 
-    public void setNPasses(int nPasses) {
-        this.nPasses = nPasses;
-    }
-
-    public void run(ImageProcessor imp) {
         /* Load in images */
-        ImagePlus imp1 = WindowManager.getImage(wList[index1]);
-        ImagePlus imp2 = WindowManager.getImage(wList[index2]);
+        imp1 = WindowManager.getImage(wList[index1]);
+        imp2 = WindowManager.getImage(wList[index2]);
 
-        ImagePlus imp1Removed = imp1.duplicate();
-        ImagePlus imp2Removed = imp2.duplicate();
-        ImageProcessor ip1 = imp1Removed.getProcessor();
-        ImageProcessor ip2 = imp2Removed.getProcessor();
+        imp1Removed = imp1.duplicate();
+        imp2Removed = imp2.duplicate();
+        ip1 = imp1Removed.getProcessor();
+        ip2 = imp2Removed.getProcessor();
 
         /* Threshold to get ROIs */
         if(methodIndex != 0){
@@ -102,7 +107,7 @@ public class roi_measure implements ExtendedPlugInFilter, DialogListener {
             ImagePlus impToThreshold = imp1.duplicate();
             IJ.run(impToThreshold, "8-bit", "");
             IJ.run(impToThreshold, "Auto Local Threshold", "method=" + autoLocalThresholdMethod[methodIndex] +
-                                   " radius=15 parameter_1=0 parameter_2=0 white");
+                    " radius=15 parameter_1=0 parameter_2=0 white");
             IJ.run(impToThreshold, "Analyze Particles...", "size=100-10000 pixel show=Nothing clear add slice");
             impToThreshold.close();
         }
@@ -110,8 +115,16 @@ public class roi_measure implements ExtendedPlugInFilter, DialogListener {
         /* Get ROIs from ROI manager */
         IJ.showStatus("Getting ROIs...");
 
-        RoiManager rm = RoiManager.getInstance();
-        int[] roiIndex = rm.getIndexes(); // Break if length = 0 or null?
+        rm = RoiManager.getInstance();
+        roiIndex = rm.getIndexes(); // Break if length = 0 or null?
+
+        return true;
+    }
+
+    public void setNPasses(int nPasses) {
+    }
+
+    public void run(ImageProcessor imp) {
 
         /* Get ROI information, masks and bounding rectangles */
         // Arrays of masks, ROIs, and bounding rectangles
