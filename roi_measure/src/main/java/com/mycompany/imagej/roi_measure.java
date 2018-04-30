@@ -123,15 +123,6 @@ public class roi_measure implements PlugIn {
         IJ.showStatus("Measuring Correlation Coefficients...");
 
         ResultsTable rt = new ResultsTable();
-        rt.setHeading(1, "Corr");
-//        rt.setHeading(2, "Std1");
-//        rt.setHeading(3, "Std2");
-//        rt.setHeading(4, "Mean1");
-//        rt.setHeading(5, "Mean2");
-//        rt.setHeading(6, "Std1/Mean1");
-//        rt.setHeading(7, "Std2/Mean2");
-//        rt.setHeading(8, "Abs(Std1-Std2)");
-        rt.setHeading(2, "Abs(Std1/Mean1-Std2/Mean2)");
 
         double[] correlationCoefficients = new double[roiIndex.length];
         double[] absDiffs = new double[roiIndex.length];
@@ -143,8 +134,10 @@ public class roi_measure implements PlugIn {
             for (int y = 0; y < boundingRectangles[i].height; y++) {
                 for (int x = 0; x < boundingRectangles[i].width; x++) {
                     if (masks[i] == null || masks[i].getPixel(x,y) != 0) {
-                        pixelIntensity1[j] = ip1Smoothed.getPixelValue(boundingRectangles[i].x + x, boundingRectangles[i].y + y);
-                        pixelIntensity2[j] = ip2Smoothed.getPixelValue(boundingRectangles[i].x + x, boundingRectangles[i].y + y);
+                        pixelIntensity1[j] = ip1Smoothed.getPixelValue(boundingRectangles[i].x + x,
+                                                                       boundingRectangles[i].y + y);
+                        pixelIntensity2[j] = ip2Smoothed.getPixelValue(boundingRectangles[i].x + x,
+                                                                       boundingRectangles[i].y + y);
                     } else {
                         pixelIntensity1[j] = -1;
                         pixelIntensity2[j] = -1;
@@ -152,18 +145,22 @@ public class roi_measure implements PlugIn {
                     j += 1;
                 }
             }
+
             correlationCoefficients[i] = correlationCoefficient(pixelIntensity1, pixelIntensity2);
             absDiffs[i] = absDiff(pixelIntensity1, pixelIntensity2);
             rt.incrementCounter();
-            rt.addValue(1, correlationCoefficients[i]);
-//            rt.addValue(2, roiSTD(pixelIntensity1));
-//            rt.addValue(3, roiSTD(pixelIntensity2));
-//            rt.addValue(4, roiMean(pixelIntensity1));
-//            rt.addValue(5, roiMean(pixelIntensity2));
-//            rt.addValue(6, roiSTD(pixelIntensity1)/roiMean(pixelIntensity1));
-//            rt.addValue(7, roiSTD(pixelIntensity2)/roiMean(pixelIntensity2));
-//            rt.addValue(8, Math.abs(roiSTD(pixelIntensity1)-roiSTD(pixelIntensity2)));
-            rt.addValue(2, absDiffs[i]);
+
+            if ((correlationCoefficients[i] > thresholdValue1) && (absDiffs[i] < thresholdValue2)){
+                rt.addValue("AF", "Yes");
+            } else
+                rt.addValue("AF", "No");
+
+            rt.addValue("Corr", correlationCoefficients[i]);
+            rt.addValue("Abs(Std1/Mean1-Std2/Mean2)", absDiffs[i]);
+            rt.addValue("Skew1", roiSkew(pixelIntensity1));
+            rt.addValue("Skew2", roiSkew(pixelIntensity2));
+            rt.addValue("Kurt1", roiKurt(pixelIntensity1));
+            rt.addValue("Kurt2", roiKurt(pixelIntensity2));
         }
 
         rt.show("Results");
@@ -194,7 +191,7 @@ public class roi_measure implements PlugIn {
                 }
 
                 ByteProcessor smallerMask = new ByteProcessor(boundingRectangles[i].width + 2*increaseSize,
-                                                              boundingRectangles[i].height + 2*increaseSize);
+                        boundingRectangles[i].height + 2*increaseSize);
                 smallerMask.insert(originalMask, increaseSize, increaseSize);
 
                 // Dilate Smaller Mask
@@ -226,7 +223,7 @@ public class roi_measure implements PlugIn {
         IJ.showStatus("Done!");
     }
 
-    /* Calculate the mean pixel intensity of the ROI, ignoring the -1 values */
+    /* Calculate the mean pixel intensity of the ROI, ignoring -1 values */
     private static double roiMean(double[] pixelIntensity) {
         double sum = 0;
         int pixelCount = 0;
@@ -237,10 +234,9 @@ public class roi_measure implements PlugIn {
                 pixelCount += 1;
             }
         }
-
         return sum / pixelCount;
     }
-    /* Calculate the standard deviation of the ROI, ignoring the -1 values */
+    /* Calculate the standard deviation of the ROI, ignoring -1 values */
     private static double roiSTD(double[] pixelIntensity) {
         double sum = 0;
         int pixelCount = 0;
@@ -251,14 +247,41 @@ public class roi_measure implements PlugIn {
                 pixelCount += 1;
             }
         }
-
         return Math.sqrt(sum/pixelCount);
     }
 
-    /* Calculate the Pearson Correlation Coefficient of an ROI between two images */
-    private static double correlationCoefficient(double[] pixelIntensity1, double[] pixelIntensity2) {
+    /* Calculates the skewness of the ROI, ignoring -1 values */
+    private static double roiSkew(double[] pixelIntensity) {
+        double sum = 0;
+        int pixelCount = 0;
+        double mean = roiMean(pixelIntensity);
+        double std = roiSTD(pixelIntensity);
+        for (double pixelValue : pixelIntensity) {
+            if(pixelValue != -1) {
+                sum += (pixelValue - mean) * (pixelValue - mean) * (pixelValue - mean);
+                pixelCount += 1;
+            }
+        }
+        return (sum / pixelCount) / (std * std * std);
+    }
 
-        // Could easily make this more efficient
+    /* Calculates the kurtosis of the ROI, ignoring -1 values */
+    private static double roiKurt(double[] pixelIntensity) {
+        double sum = 0;
+        int pixelCount = 0;
+        double mean = roiMean(pixelIntensity);
+        double std = roiSTD(pixelIntensity);
+        for (double pixelValue : pixelIntensity) {
+            if (pixelValue != -1) {
+                sum += (pixelValue - mean) * (pixelValue - mean) * (pixelValue - mean) * (pixelValue - mean);
+                pixelCount += 1;
+            }
+        }
+        return (sum / pixelCount) / (std * std * std * std);
+    }
+
+    /* Calculate the Pearson Correlation Coefficient of an ROI between two images, ignoring -1 values */
+    private static double correlationCoefficient(double[] pixelIntensity1, double[] pixelIntensity2) {
         double roiMean1 = roiMean(pixelIntensity1);
         double roiMean2 = roiMean(pixelIntensity2);
         double[][] coefficientVals = new double[2][pixelIntensity1.length];
@@ -280,7 +303,6 @@ public class roi_measure implements PlugIn {
                 d2 += coefficientVals[1][i] * coefficientVals[1][i];
             }
         }
-
         return n1/(Math.sqrt(d1) * Math.sqrt(d2));
     }
 
