@@ -9,6 +9,7 @@ import ij.ImagePlus;
 import ij.WindowManager;
 import ij.gui.GenericDialog;
 import ij.gui.Roi;
+import ij.measure.ResultsTable;
 import ij.plugin.PlugIn;
 import ij.plugin.frame.RoiManager;
 import ij.process.ByteProcessor;
@@ -22,8 +23,8 @@ import java.awt.*;
 
 public class roi_measure implements PlugIn {
 
-    private static String[] autoLocalThresholdMethod = {"Do not perform auto-local thresholding", "Bernsen", "Contrast", "Mean", "Median", "MidGrey", "Niblack",
-                                                        "Otsu", "Phansalkar", "Sauvola"};
+    private static String[] autoLocalThresholdMethod = {"Do not perform auto-local thresholding", "Bernsen", "Contrast",
+                                                        "Mean", "Median", "MidGrey", "Niblack", "Otsu", "Phansalkar", "Sauvola"};
 
     public void run(String arg) {
 
@@ -49,7 +50,8 @@ public class roi_measure implements PlugIn {
         gd.addChoice("Method:", autoLocalThresholdMethod, "Niblack");
         gd.addNumericField("Number of Dilations:", 3, 0);
         gd.addNumericField("Number of Smooths:", 1, 0);
-        gd.addNumericField("AF Cutoff", 0.60, 2);
+        gd.addNumericField("Corr. Coeff. Cutoff", 0.60, 2);
+        gd.addNumericField("Abs. Diff. Cutoff", 0.17, 2);
         gd.showDialog();
         if (gd.wasCanceled())
             return;
@@ -60,14 +62,16 @@ public class roi_measure implements PlugIn {
         int methodIndex = gd.getNextChoiceIndex();
         int numberDilations = (int) gd.getNextNumber();
         int numberSmooths = (int) gd.getNextNumber();
-        double thresholdValue = gd.getNextNumber();
+        double thresholdValue1 = gd.getNextNumber();
+        double thresholdValue2 = gd.getNextNumber();
+
 
         /* Load in images */
         ImagePlus imp1 = WindowManager.getImage(wList[index1]);
         ImagePlus imp2 = WindowManager.getImage(wList[index2]);
 
         ImagePlus imp1Smoothed = imp1.duplicate();
-        ImagePlus imp2Smoothed = imp1.duplicate();
+        ImagePlus imp2Smoothed = imp2.duplicate();
 
         for (int i = 0; i < numberSmooths; i ++) {
             IJ.run(imp1Smoothed, "Smooth", "");
@@ -118,7 +122,19 @@ public class roi_measure implements PlugIn {
         /* Store Correlation Coefficients of ROIs */
         IJ.showStatus("Measuring Correlation Coefficients...");
 
+        ResultsTable rt = new ResultsTable();
+        rt.setHeading(1, "Corr");
+//        rt.setHeading(2, "Std1");
+//        rt.setHeading(3, "Std2");
+//        rt.setHeading(4, "Mean1");
+//        rt.setHeading(5, "Mean2");
+//        rt.setHeading(6, "Std1/Mean1");
+//        rt.setHeading(7, "Std2/Mean2");
+//        rt.setHeading(8, "Abs(Std1-Std2)");
+        rt.setHeading(2, "Abs(Std1/Mean1-Std2/Mean2)");
+
         double[] correlationCoefficients = new double[roiIndex.length];
+        double[] absDiffs = new double[roiIndex.length];
 
         for (int i = 0; i < roiIndex.length; i++) {
             double[] pixelIntensity1 = new double[sizes[i]];
@@ -137,7 +153,20 @@ public class roi_measure implements PlugIn {
                 }
             }
             correlationCoefficients[i] = correlationCoefficient(pixelIntensity1, pixelIntensity2);
+            absDiffs[i] = absDiff(pixelIntensity1, pixelIntensity2);
+            rt.incrementCounter();
+            rt.addValue(1, correlationCoefficients[i]);
+//            rt.addValue(2, roiSTD(pixelIntensity1));
+//            rt.addValue(3, roiSTD(pixelIntensity2));
+//            rt.addValue(4, roiMean(pixelIntensity1));
+//            rt.addValue(5, roiMean(pixelIntensity2));
+//            rt.addValue(6, roiSTD(pixelIntensity1)/roiMean(pixelIntensity1));
+//            rt.addValue(7, roiSTD(pixelIntensity2)/roiMean(pixelIntensity2));
+//            rt.addValue(8, Math.abs(roiSTD(pixelIntensity1)-roiSTD(pixelIntensity2)));
+            rt.addValue(2, absDiffs[i]);
         }
+
+        rt.show("Results");
 
         /* Remove Autofluorescent ROIs */
         IJ.showStatus("Removing Autofluorescence...");
@@ -150,7 +179,7 @@ public class roi_measure implements PlugIn {
         int increaseSize = numberDilations + 10;
 
         for (int i = 0; i < roiIndex.length; i++) {
-            if (correlationCoefficients[i] > thresholdValue) {
+            if ((correlationCoefficients[i] > thresholdValue1) && (absDiffs[i] < thresholdValue2)){
                 // Reset Mask
                 bpDilatedMask.setColor(0);
                 bpDilatedMask.fill();
@@ -164,7 +193,8 @@ public class roi_measure implements PlugIn {
                     originalMask.fill();
                 }
 
-                ByteProcessor smallerMask = new ByteProcessor(boundingRectangles[i].width + 2*increaseSize, boundingRectangles[i].height + 2*increaseSize);
+                ByteProcessor smallerMask = new ByteProcessor(boundingRectangles[i].width + 2*increaseSize,
+                                                              boundingRectangles[i].height + 2*increaseSize);
                 smallerMask.insert(originalMask, increaseSize, increaseSize);
 
                 // Dilate Smaller Mask
@@ -210,35 +240,53 @@ public class roi_measure implements PlugIn {
 
         return sum / pixelCount;
     }
+    /* Calculate the standard deviation of the ROI, ignoring the -1 values */
+    private static double roiSTD(double[] pixelIntensity) {
+        double sum = 0;
+        int pixelCount = 0;
+        double mean = roiMean(pixelIntensity);
+        for (double pixelValue : pixelIntensity) {
+            if(pixelValue != -1) {
+                sum += (pixelValue - mean) * (pixelValue - mean);
+                pixelCount += 1;
+            }
+        }
+
+        return Math.sqrt(sum/pixelCount);
+    }
 
     /* Calculate the Pearson Correlation Coefficient of an ROI between two images */
     private static double correlationCoefficient(double[] pixelIntensity1, double[] pixelIntensity2) {
-        if (pixelIntensity1.length != pixelIntensity2.length) {
-            return -1; // Should not occur, but added anyway
-        } else {
-            // Could easily make this more efficient
-            double roiMean1 = roiMean(pixelIntensity1);
-            double roiMean2 = roiMean(pixelIntensity2);
-            double[][] coefficientVals = new double[2][pixelIntensity1.length];
 
-            for (int i = 0; i < pixelIntensity1.length; i++) {
-                if (pixelIntensity1[i] != -1) {
-                    coefficientVals[0][i] = pixelIntensity1[i] - roiMean1;
-                    coefficientVals[1][i] = pixelIntensity2[i] - roiMean2;
-                }
-            }
+        // Could easily make this more efficient
+        double roiMean1 = roiMean(pixelIntensity1);
+        double roiMean2 = roiMean(pixelIntensity2);
+        double[][] coefficientVals = new double[2][pixelIntensity1.length];
 
-            double n1 = 0;
-            double d1 = 0;
-            double d2 = 0;
-            for (int i = 0; i < pixelIntensity1.length; i++) {
-                if (pixelIntensity1[i] != -1) {
-                    n1 += coefficientVals[0][i] * coefficientVals[1][i];
-                    d1 += coefficientVals[0][i] * coefficientVals[0][i];
-                    d2 += coefficientVals[1][i] * coefficientVals[1][i];
-                }
+        for (int i = 0; i < pixelIntensity1.length; i++) {
+            if (pixelIntensity1[i] != -1) {
+                coefficientVals[0][i] = pixelIntensity1[i] - roiMean1;
+                coefficientVals[1][i] = pixelIntensity2[i] - roiMean2;
             }
-            return n1/(Math.sqrt(d1) * Math.sqrt(d2));
         }
+
+        double n1 = 0;
+        double d1 = 0;
+        double d2 = 0;
+        for (int i = 0; i < pixelIntensity1.length; i++) {
+            if (pixelIntensity1[i] != -1) {
+                n1 += coefficientVals[0][i] * coefficientVals[1][i];
+                d1 += coefficientVals[0][i] * coefficientVals[0][i];
+                d2 += coefficientVals[1][i] * coefficientVals[1][i];
+            }
+        }
+
+        return n1/(Math.sqrt(d1) * Math.sqrt(d2));
+    }
+
+    /* Calculates absolute difference between standard deviations divided by mean */
+    private static double absDiff(double[] pixelIntensity1, double[] pixelIntensity2) {
+        return Math.abs(roiSTD(pixelIntensity1)/roiMean(pixelIntensity1) -
+                        roiSTD(pixelIntensity2)/roiMean(pixelIntensity2));
     }
 }
