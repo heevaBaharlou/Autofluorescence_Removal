@@ -17,6 +17,7 @@ import ij.plugin.frame.RoiManager;
 import ij.process.ByteProcessor;
 import ij.process.ImageProcessor;
 import ij.process.ImageStatistics;
+
 import java.awt.*;
 
 public class roi_measure implements ExtendedPlugInFilter, DialogListener {
@@ -179,69 +180,70 @@ public class roi_measure implements ExtendedPlugInFilter, DialogListener {
                 afROI[i] = rois[j];
         }
 
+        /* Remove Autofluorescent ROIs or Preview*/
         if (previewing) {
             for (i = 0; i < count; i++) {
                 imp1.setRoi(afROI[i]);
                 imp2.setRoi(afROI[i]);
             }
-        }
+        } else {
+            IJ.showStatus("Removing Autofluorescence...");
+            ImageStatistics is1 = ip1.getStatistics();
+            ImageStatistics is2 = ip2.getStatistics();
 
-        /* Remove Autofluorescent ROIs */
-        IJ.showStatus("Removing Autofluorescence...");
-        ImageStatistics is1 = ip1.getStatistics();
-        ImageStatistics is2 = ip2.getStatistics();
+            ImagePlus impDilatedMask = imp1.duplicate();
+            ImageProcessor ipDilatedMask = impDilatedMask.getProcessor();
+            ByteProcessor bpDilatedMask = ipDilatedMask.convertToByteProcessor();
+            int increaseSize = numberDilations + 10;
 
-        ImagePlus impDilatedMask = imp1.duplicate();
-        ImageProcessor ipDilatedMask = impDilatedMask.getProcessor();
-        ByteProcessor bpDilatedMask = ipDilatedMask.convertToByteProcessor();
-        int increaseSize = numberDilations + 10;
+            for (i = 0; i < roiIndex.length; i++) {
+                if (correlationCoefficients[i] > thresholdValue) {
+                    // Reset Mask
+                    bpDilatedMask.setColor(0);
+                    bpDilatedMask.fill();
 
-        for (i = 0; i < roiIndex.length; i++) {
-            if (correlationCoefficients[i] > thresholdValue) {
-                // Reset Mask
-                bpDilatedMask.setColor(0);
-                bpDilatedMask.fill();
+                    // Create Smaller Mask
+                    ByteProcessor originalMask = new ByteProcessor(boundingRectangles[i].width, boundingRectangles[i].height);
+                    if (masks[i] != null) {
+                        originalMask = masks[i].convertToByteProcessor();
+                    } else {
+                        originalMask.setColor(255);
+                        originalMask.fill();
+                    }
 
-                // Create Smaller Mask
-                ByteProcessor originalMask = new ByteProcessor(boundingRectangles[i].width, boundingRectangles[i].height);
-                if (masks[i] != null) {
-                    originalMask = masks[i].convertToByteProcessor();
-                } else {
-                    originalMask.setColor(255);
-                    originalMask.fill();
+                    ByteProcessor smallerMask = new ByteProcessor(boundingRectangles[i].width + 2*increaseSize,
+                            boundingRectangles[i].height + 2*increaseSize);
+                    smallerMask.insert(originalMask, increaseSize, increaseSize);
+
+                    // Dilate Smaller Mask
+                    for (int j = 0; j < numberDilations; j++) {
+                        smallerMask.dilate(1, 0);
+                    }
+
+                    // Creates Full Image Mask
+                    bpDilatedMask.insert(smallerMask, boundingRectangles[i].x - increaseSize, boundingRectangles[i].y - increaseSize);
+
+                    // Remove Autofluorescence
+                    ip1.setColor(is1.median);
+                    ip2.setColor(is2.median);
+                    ip1.fill(bpDilatedMask);
+                    ip2.fill(bpDilatedMask);
                 }
-
-                ByteProcessor smallerMask = new ByteProcessor(boundingRectangles[i].width + 2*increaseSize,
-                                                              boundingRectangles[i].height + 2*increaseSize);
-                smallerMask.insert(originalMask, increaseSize, increaseSize);
-
-                // Dilate Smaller Mask
-                for (int j = 0; j < numberDilations; j++) {
-                    smallerMask.dilate(1, 0);
-                }
-
-                // Creates Full Image Mask
-                bpDilatedMask.insert(smallerMask, boundingRectangles[i].x - increaseSize, boundingRectangles[i].y - increaseSize);
-
-                // Remove Autofluorescence
-                ip1.setColor(is1.median);
-                ip2.setColor(is2.median);
-                ip1.fill(bpDilatedMask);
-                ip2.fill(bpDilatedMask);
             }
+            impDilatedMask.close();
+
+            ImagePlus impNew1 = new ImagePlus(titles[index1].substring(0, titles[index1].length() - 4) + "_AF_Removed.tif", ip1);
+            ImagePlus impNew2 = new ImagePlus(titles[index2].substring(0, titles[index2].length() - 4) + "_AF_Removed.tif", ip2);
+
+            impNew1.show();
+            impNew2.show();
+
+            imp1Removed.close();
+            imp2Removed.close();
+
+            IJ.showStatus("Done!");
         }
-        impDilatedMask.close();
 
-        ImagePlus impNew1 = new ImagePlus(titles[index1].substring(0, titles[index1].length() - 4) + "_AF_Removed.tif", ip1);
-        ImagePlus impNew2 = new ImagePlus(titles[index2].substring(0, titles[index2].length() - 4) + "_AF_Removed.tif", ip2);
-
-        impNew1.show();
-        impNew2.show();
-
-        imp1Removed.close();
-        imp2Removed.close();
-
-        IJ.showStatus("Done!");
     }
 
     /* Calculate the mean pixel intensity of the ROI, ignoring the -1 values */
