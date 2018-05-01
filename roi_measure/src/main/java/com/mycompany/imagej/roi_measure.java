@@ -15,11 +15,7 @@ import ij.plugin.frame.RoiManager;
 import ij.process.ByteProcessor;
 import ij.process.ImageProcessor;
 import ij.process.ImageStatistics;
-
 import java.awt.*;
-
-// import ij.plugin.ChannelSplitter;
-// import ij.plugin.frame.*;
 
 public class roi_measure implements PlugIn {
 
@@ -52,6 +48,7 @@ public class roi_measure implements PlugIn {
         gd.addNumericField("Number of Smooths:", 1, 0);
         gd.addNumericField("Corr. Coeff. Cutoff", 0.60, 2);
         gd.addNumericField("Abs. Diff. Cutoff", 0.17, 2);
+        gd.addNumericField("Euclidean Dist. Cutoff", 100000, 2);
         gd.showDialog();
         if (gd.wasCanceled())
             return;
@@ -62,8 +59,9 @@ public class roi_measure implements PlugIn {
         int methodIndex = gd.getNextChoiceIndex();
         int numberDilations = (int) gd.getNextNumber();
         int numberSmooths = (int) gd.getNextNumber();
-        double thresholdValue1 = gd.getNextNumber();
-        double thresholdValue2 = gd.getNextNumber();
+        double cutOff1 = gd.getNextNumber();
+        double cutOff2 = gd.getNextNumber();
+        double cutOff3 = gd.getNextNumber();
 
 
         /* Load in images */
@@ -126,6 +124,7 @@ public class roi_measure implements PlugIn {
 
         double[] correlationCoefficients = new double[roiIndex.length];
         double[] absDiffs = new double[roiIndex.length];
+        double[] eucDist = new double[roiIndex.length];
 
         for (int i = 0; i < roiIndex.length; i++) {
             double[] pixelIntensity1 = new double[sizes[i]];
@@ -148,15 +147,20 @@ public class roi_measure implements PlugIn {
 
             correlationCoefficients[i] = correlationCoefficient(pixelIntensity1, pixelIntensity2);
             absDiffs[i] = absDiff(pixelIntensity1, pixelIntensity2);
+            eucDist[i] = roiEuclidean(pixelIntensity1, pixelIntensity2);
+
             rt.incrementCounter();
 
-            if ((correlationCoefficients[i] > thresholdValue1) && (absDiffs[i] < thresholdValue2)){
+            if (((correlationCoefficients[i] > cutOff1) || (cutOff1 == 0)) &&
+                    ((absDiffs[i] < cutOff2) || (cutOff2 == 0)) &&
+                    ((eucDist[i] < cutOff3)) || (cutOff3 == 0)){
                 rt.addValue("AF", "Yes");
             } else
                 rt.addValue("AF", "No");
 
             rt.addValue("Corr", correlationCoefficients[i]);
-            rt.addValue("Abs(Std1/Mean1-Std2/Mean2)", absDiffs[i]);
+            rt.addValue("AbsDiff", absDiffs[i]);
+            rt.addValue("EuclidDist", eucDist[i]);
             rt.addValue("Skew1", roiSkew(pixelIntensity1));
             rt.addValue("Skew2", roiSkew(pixelIntensity2));
             rt.addValue("Kurt1", roiKurt(pixelIntensity1));
@@ -176,7 +180,9 @@ public class roi_measure implements PlugIn {
         int increaseSize = numberDilations + 10;
 
         for (int i = 0; i < roiIndex.length; i++) {
-            if ((correlationCoefficients[i] > thresholdValue1) && (absDiffs[i] < thresholdValue2)){
+            if (((correlationCoefficients[i] > cutOff1) || (cutOff1 == 0)) &&
+                    ((absDiffs[i] < cutOff2) || (cutOff2 == 0)) &&
+                    ((eucDist[i] < cutOff3)) || (cutOff3 == 0)){
                 // Reset Mask
                 bpDilatedMask.setColor(0);
                 bpDilatedMask.fill();
@@ -248,6 +254,19 @@ public class roi_measure implements PlugIn {
             }
         }
         return Math.sqrt(sum/pixelCount);
+    }
+
+    /* Calculates the Euclidean distance of the ROI, ignoring -1 values */
+    private static double roiEuclidean(double[] pixelIntensity1, double[] pixelIntensity2) {
+        double sum = 0;
+        int pixelCount = 0;
+        for (int i = 0; i < pixelIntensity1.length; i++) {
+            if (pixelIntensity1[i] != -1) {
+                sum += (pixelIntensity1[i] - pixelIntensity2[i]) * (pixelIntensity1[i] - pixelIntensity2[i]);
+                pixelCount += 1;
+            }
+        }
+        return Math.sqrt(sum)/pixelCount;
     }
 
     /* Calculates the skewness of the ROI, ignoring -1 values */

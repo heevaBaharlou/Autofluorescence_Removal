@@ -18,8 +18,8 @@
       <file leaf-file-name="roi_measure.java" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/src/main/java/com/mycompany/imagej/roi_measure.java">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="1450">
-              <caret line="283" column="102" lean-forward="false" selection-start-line="283" selection-start-column="102" selection-end-line="283" selection-end-column="102" />
+            <state relative-caret-position="236">
+              <caret line="132" column="68" lean-forward="true" selection-start-line="132" selection-start-column="68" selection-end-line="132" selection-end-column="68" />
               <folding>
                 <element signature="imports" expanded="true" />
               </folding>
@@ -75,7 +75,7 @@
       <select />
     </treeState>
   </component>
-  <component name="ProjectFrameBounds" extendedState="6">
+  <component name="ProjectFrameBounds">
     <option name="y" value="23" />
     <option name="width" value="1440" />
     <option name="height" value="877" />
@@ -272,7 +272,7 @@
     <servers />
   </component>
   <component name="ToolWindowManager">
-    <frame x="0" y="23" width="1440" height="877" extended-state="6" />
+    <frame x="0" y="23" width="1440" height="877" extended-state="0" />
     <editor active="true" />
     <layout>
       <window_info id="Palette" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="3" side_tool="false" content_ui="tabs" />
@@ -589,8 +589,8 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/src/main/java/com/mycompany/imagej/roi_measure.java">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="1450">
-          <caret line="283" column="102" lean-forward="false" selection-start-line="283" selection-start-column="102" selection-end-line="283" selection-end-column="102" />
+        <state relative-caret-position="236">
+          <caret line="132" column="68" lean-forward="true" selection-start-line="132" selection-start-column="68" selection-end-line="132" selection-end-column="68" />
           <folding>
             <element signature="imports" expanded="true" />
           </folding>
