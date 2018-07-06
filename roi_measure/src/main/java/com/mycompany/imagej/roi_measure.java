@@ -4,6 +4,7 @@ package com.mycompany.imagej;
 // TODO: Add contingencies
 
 // Plugins
+
 import ij.IJ;
 import ij.ImagePlus;
 import ij.WindowManager;
@@ -15,6 +16,7 @@ import ij.plugin.frame.RoiManager;
 import ij.process.ByteProcessor;
 import ij.process.ImageProcessor;
 import ij.process.ImageStatistics;
+
 import java.awt.*;
 
 public class roi_measure implements PlugIn {
@@ -47,8 +49,6 @@ public class roi_measure implements PlugIn {
         gd.addNumericField("Number of Dilations:", 3, 0);
         gd.addNumericField("Number of Smooths:", 1, 0);
         gd.addNumericField("Corr. Coeff. Cutoff", 0.60, 2);
-        gd.addNumericField("Abs. Diff. Cutoff", 0.17, 2);
-        gd.addNumericField("Euclidean Dist. Cutoff", 100000, 2);
         gd.showDialog();
         if (gd.wasCanceled())
             return;
@@ -60,8 +60,6 @@ public class roi_measure implements PlugIn {
         int numberDilations = (int) gd.getNextNumber();
         int numberSmooths = (int) gd.getNextNumber();
         double cutOff1 = gd.getNextNumber();
-        double cutOff2 = gd.getNextNumber();
-        double cutOff3 = gd.getNextNumber();
 
 
         /* Load in images */
@@ -123,8 +121,6 @@ public class roi_measure implements PlugIn {
         ResultsTable rt = new ResultsTable();
 
         double[] correlationCoefficients = new double[roiIndex.length];
-        double[] absDiffs = new double[roiIndex.length];
-        double[] eucDist = new double[roiIndex.length];
 
         for (int i = 0; i < roiIndex.length; i++) {
             double[] pixelIntensity1 = new double[sizes[i]];
@@ -146,25 +142,6 @@ public class roi_measure implements PlugIn {
             }
 
             correlationCoefficients[i] = correlationCoefficient(pixelIntensity1, pixelIntensity2);
-            absDiffs[i] = absDiff(pixelIntensity1, pixelIntensity2);
-            eucDist[i] = roiEuclidean(pixelIntensity1, pixelIntensity2);
-
-            rt.incrementCounter();
-
-            if (((correlationCoefficients[i] > cutOff1) || (cutOff1 == 0)) &&
-                    ((absDiffs[i] < cutOff2) || (cutOff2 == 0)) &&
-                    ((eucDist[i] < cutOff3)) || (cutOff3 == 0)){
-                rt.addValue("AF", "Yes");
-            } else
-                rt.addValue("AF", "No");
-
-            rt.addValue("Corr", correlationCoefficients[i]);
-            rt.addValue("AbsDiff", absDiffs[i]);
-            rt.addValue("EuclidDist", eucDist[i]);
-            rt.addValue("Skew1", roiSkew(pixelIntensity1));
-            rt.addValue("Skew2", roiSkew(pixelIntensity2));
-            rt.addValue("Kurt1", roiKurt(pixelIntensity1));
-            rt.addValue("Kurt2", roiKurt(pixelIntensity2));
         }
 
         rt.show("Results");
@@ -174,48 +151,45 @@ public class roi_measure implements PlugIn {
         ImageStatistics is1 = ip1.getStatistics();
         ImageStatistics is2 = ip2.getStatistics();
 
+        // Generate mask of ROIs to remove
         ImagePlus impDilatedMask = imp1.duplicate();
+        IJ.run(impDilatedMask, "8-bit", "");
         ImageProcessor ipDilatedMask = impDilatedMask.getProcessor();
-        ByteProcessor bpDilatedMask = ipDilatedMask.convertToByteProcessor();
-        int increaseSize = numberDilations + 10;
+        ipDilatedMask.setColor(0);
+        ipDilatedMask.fill();
 
         for (int i = 0; i < roiIndex.length; i++) {
-            if (((correlationCoefficients[i] > cutOff1) || (cutOff1 == 0)) &&
-                    ((absDiffs[i] < cutOff2) || (cutOff2 == 0)) &&
-                    ((eucDist[i] < cutOff3)) || (cutOff3 == 0)){
-                // Reset Mask
-                bpDilatedMask.setColor(0);
-                bpDilatedMask.fill();
-
-                // Create Smaller Mask
-                ByteProcessor originalMask = new ByteProcessor(boundingRectangles[i].width, boundingRectangles[i].height);
+            if (correlationCoefficients[i] > cutOff1) {
                 if (masks[i] != null) {
-                    originalMask = masks[i].convertToByteProcessor();
+                    ipDilatedMask.insert(masks[i], boundingRectangles[i].x, boundingRectangles[i].y);
                 } else {
-                    originalMask.setColor(255);
-                    originalMask.fill();
+                    ByteProcessor rectangleMask = new ByteProcessor(boundingRectangles[i].width, boundingRectangles[i].height);
+                    rectangleMask.setColor(255);
+                    rectangleMask.fill();
+                    ipDilatedMask.insert(rectangleMask, boundingRectangles[i].x, boundingRectangles[i].y);
                 }
-
-                ByteProcessor smallerMask = new ByteProcessor(boundingRectangles[i].width + 2*increaseSize,
-                        boundingRectangles[i].height + 2*increaseSize);
-                smallerMask.insert(originalMask, increaseSize, increaseSize);
-
-                // Dilate Smaller Mask
-                for (int j = 0; j < numberDilations; j++) {
-                    smallerMask.dilate(1, 0);
-                }
-
-                // Creates Full Image Mask
-                bpDilatedMask.insert(smallerMask, boundingRectangles[i].x - increaseSize, boundingRectangles[i].y - increaseSize);
-
-                // Remove Autofluorescence
-                ip1.setColor(is1.median);
-                ip2.setColor(is2.median);
-                ip1.fill(bpDilatedMask);
-                ip2.fill(bpDilatedMask);
             }
         }
+
+        // Dilate mask of ROIs
+        for (int i = 0; i < numberDilations; i++) {
+            ipDilatedMask.dilate();
+        }
+
+        // Convert mask to ROIs
+        IJ.run(impDilatedMask, "Analyze Particles...", "size=100-10000 pixel show=Nothing clear add slice");
         impDilatedMask.close();
+
+        roiIndex = rm.getIndexes();
+
+        ip1.setColor(is1.median);
+        ip2.setColor(is2.median);
+
+        for (int i : roiIndex) {
+            Roi afRoi = rm.getRoi(i);
+            ip1.fill(afRoi);
+            ip2.fill(afRoi);
+        }
 
         ImagePlus impNew1 = new ImagePlus(titles[index1].substring(0, titles[index1].length() - 4) + "_AF_Removed.tif", ip1);
         ImagePlus impNew2 = new ImagePlus(titles[index2].substring(0, titles[index2].length() - 4) + "_AF_Removed.tif", ip2);
@@ -242,62 +216,6 @@ public class roi_measure implements PlugIn {
         }
         return sum / pixelCount;
     }
-    /* Calculate the standard deviation of the ROI, ignoring -1 values */
-    private static double roiSTD(double[] pixelIntensity) {
-        double sum = 0;
-        int pixelCount = 0;
-        double mean = roiMean(pixelIntensity);
-        for (double pixelValue : pixelIntensity) {
-            if(pixelValue != -1) {
-                sum += (pixelValue - mean) * (pixelValue - mean);
-                pixelCount += 1;
-            }
-        }
-        return Math.sqrt(sum/pixelCount);
-    }
-
-    /* Calculates the Euclidean distance of the ROI, ignoring -1 values */
-    private static double roiEuclidean(double[] pixelIntensity1, double[] pixelIntensity2) {
-        double sum = 0;
-        int pixelCount = 0;
-        for (int i = 0; i < pixelIntensity1.length; i++) {
-            if (pixelIntensity1[i] != -1) {
-                sum += (pixelIntensity1[i] - pixelIntensity2[i]) * (pixelIntensity1[i] - pixelIntensity2[i]);
-                pixelCount += 1;
-            }
-        }
-        return Math.sqrt(sum)/pixelCount;
-    }
-
-    /* Calculates the skewness of the ROI, ignoring -1 values */
-    private static double roiSkew(double[] pixelIntensity) {
-        double sum = 0;
-        int pixelCount = 0;
-        double mean = roiMean(pixelIntensity);
-        double std = roiSTD(pixelIntensity);
-        for (double pixelValue : pixelIntensity) {
-            if(pixelValue != -1) {
-                sum += (pixelValue - mean) * (pixelValue - mean) * (pixelValue - mean);
-                pixelCount += 1;
-            }
-        }
-        return (sum / pixelCount) / (std * std * std);
-    }
-
-    /* Calculates the kurtosis of the ROI, ignoring -1 values */
-    private static double roiKurt(double[] pixelIntensity) {
-        double sum = 0;
-        int pixelCount = 0;
-        double mean = roiMean(pixelIntensity);
-        double std = roiSTD(pixelIntensity);
-        for (double pixelValue : pixelIntensity) {
-            if (pixelValue != -1) {
-                sum += (pixelValue - mean) * (pixelValue - mean) * (pixelValue - mean) * (pixelValue - mean);
-                pixelCount += 1;
-            }
-        }
-        return (sum / pixelCount) / (std * std * std * std);
-    }
 
     /* Calculate the Pearson Correlation Coefficient of an ROI between two images, ignoring -1 values */
     private static double correlationCoefficient(double[] pixelIntensity1, double[] pixelIntensity2) {
@@ -323,11 +241,5 @@ public class roi_measure implements PlugIn {
             }
         }
         return n1/(Math.sqrt(d1) * Math.sqrt(d2));
-    }
-
-    /* Calculates absolute difference between standard deviations divided by mean */
-    private static double absDiff(double[] pixelIntensity1, double[] pixelIntensity2) {
-        return Math.abs(roiSTD(pixelIntensity1)/roiMean(pixelIntensity1) -
-                        roiSTD(pixelIntensity2)/roiMean(pixelIntensity2));
     }
 }
