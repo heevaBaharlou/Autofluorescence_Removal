@@ -10,7 +10,7 @@ import ij.ImagePlus;
 import ij.WindowManager;
 import ij.gui.GenericDialog;
 import ij.gui.Roi;
-import ij.measure.ResultsTable;
+import ij.plugin.ImageCalculator;
 import ij.plugin.PlugIn;
 import ij.plugin.frame.RoiManager;
 import ij.process.ByteProcessor;
@@ -47,7 +47,7 @@ public class roi_measure implements PlugIn {
         gd.addChoice("Image 2:", titles, titles[1]);
         gd.addChoice("Method:", autoLocalThresholdMethod, "Niblack");
         gd.addNumericField("Number of Dilations:", 3, 0);
-        gd.addNumericField("Number of Smooths:", 1, 0);
+        gd.addNumericField("Number of Smooths:", 0, 0);
         gd.addNumericField("Corr. Coeff. Cutoff", 0.60, 2);
         gd.showDialog();
         if (gd.wasCanceled())
@@ -84,14 +84,31 @@ public class roi_measure implements PlugIn {
 
         /* Threshold to get ROIs */
         if(methodIndex != 0){
+            // Threshold Channel 1
             IJ.showStatus("Thresholding...");
 
-            ImagePlus impToThreshold = imp1.duplicate();
-            IJ.run(impToThreshold, "8-bit", "");
-            IJ.run(impToThreshold, "Auto Local Threshold", "method=" + autoLocalThresholdMethod[methodIndex] +
+            ImagePlus ch1Threshold = imp1.duplicate();
+            IJ.run(ch1Threshold, "8-bit", "");
+            IJ.run(ch1Threshold, "Auto Local Threshold", "method=" + autoLocalThresholdMethod[methodIndex] +
                                    " radius=15 parameter_1=0 parameter_2=0 white");
-            IJ.run(impToThreshold, "Analyze Particles...", "size=100-10000 pixel show=Nothing clear add slice");
-            impToThreshold.close();
+
+            // Threshold Channel 2
+            ImagePlus ch2Threshold = imp2.duplicate();
+            IJ.run(ch2Threshold, "8-bit", "");
+            IJ.run(ch2Threshold, "Auto Local Threshold", "method=" + autoLocalThresholdMethod[methodIndex] +
+                    " radius=15 parameter_1=0 parameter_2=0 white");
+
+            // Get AND ROIs
+            ImageCalculator ic = new ImageCalculator();
+
+            ImagePlus impAnd = ic.run("AND create", ch1Threshold, ch2Threshold);
+            IJ.run(impAnd, "Auto Local Threshold", "method=" + autoLocalThresholdMethod[methodIndex] +
+                    " radius=15 parameter_1=0 parameter_2=0 white");
+            IJ.run(impAnd, "Analyze Particles...", "size=100-10000 pixel show=Nothing clear add slice");
+
+            ch1Threshold.close();
+            ch2Threshold.close();
+            impAnd.close();
         }
 
         /* Get ROIs from ROI manager */
@@ -118,8 +135,6 @@ public class roi_measure implements PlugIn {
         /* Store Correlation Coefficients of ROIs */
         IJ.showStatus("Measuring Correlation Coefficients...");
 
-        ResultsTable rt = new ResultsTable();
-
         double[] correlationCoefficients = new double[roiIndex.length];
 
         for (int i = 0; i < roiIndex.length; i++) {
@@ -144,8 +159,6 @@ public class roi_measure implements PlugIn {
             correlationCoefficients[i] = correlationCoefficient(pixelIntensity1, pixelIntensity2);
         }
 
-        rt.show("Results");
-
         /* Remove Autofluorescent ROIs */
         IJ.showStatus("Removing Autofluorescence...");
         ImageStatistics is1 = ip1.getStatistics();
@@ -158,6 +171,7 @@ public class roi_measure implements PlugIn {
         ipDilatedMask.setColor(0);
         ipDilatedMask.fill();
 
+        // TODO: Work on ROIs rather than masks (so much easier!)
         for (int i = 0; i < roiIndex.length; i++) {
             if (correlationCoefficients[i] > cutOff1) {
                 if (masks[i] != null) {
@@ -180,6 +194,7 @@ public class roi_measure implements PlugIn {
         IJ.run(impDilatedMask, "Analyze Particles...", "size=100-10000 pixel show=Nothing clear add slice");
         impDilatedMask.close();
 
+        rm = RoiManager.getInstance();
         roiIndex = rm.getIndexes();
 
         ip1.setColor(is1.median);
