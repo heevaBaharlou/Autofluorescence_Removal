@@ -41,9 +41,13 @@ public class roi_measure implements ExtendedPlugInFilter, DialogListener {
     private static ImagePlus imp2Removed;
     private static ImageProcessor ip1;
     private static ImageProcessor ip2;
-    private static RoiManager rm;
+    // private static RoiManager rm;
     private static int[] roiIndex;
-    private static boolean preview;
+    private int count;
+    private Roi[] afROI;
+    private double[] correlationCoefficients;
+    private ImageProcessor[] masks;
+    private Rectangle[] boundingRectangles;
 
     public int setup(String arg, ImagePlus ip) {
         return DOES_ALL;
@@ -72,15 +76,8 @@ public class roi_measure implements ExtendedPlugInFilter, DialogListener {
         gd.addNumericField("Number of Dilations:", 3, 0);
         gd.addNumericField("AF Cutoff", 0.60, 2);
         gd.addPreviewCheckbox(pfr, "Preview AF ROIs");
-        previewing = true;
-        // gd.addHelp(IJ.URL+"/docs/menus/process.html#find-maxima");
         gd.showDialog();
-        if (gd.wasCanceled())
-            return DONE;
-        previewing = false;
-        if (!dialogItemChanged(gd, null))
-            return DONE;
-        return DOES_ALL|KEEP_PREVIEW;
+        return DOES_ALL;
     }
 
 
@@ -116,22 +113,15 @@ public class roi_measure implements ExtendedPlugInFilter, DialogListener {
         /* Get ROIs from ROI manager */
         IJ.showStatus("Getting ROIs...");
 
-        rm = RoiManager.getInstance();
+        RoiManager rm = RoiManager.getInstance();
         roiIndex = rm.getIndexes(); // Break if length = 0 or null?
 
-        return true;
-    }
-
-    public void setNPasses(int nPasses) {
-    }
-
-    public void run(ImageProcessor imp) {
 
         /* Get ROI information, masks and bounding rectangles */
         // Arrays of masks, ROIs, and bounding rectangles
-        ImageProcessor[] masks = new ImageProcessor[roiIndex.length];
+        masks = new ImageProcessor[roiIndex.length];
         Roi[] rois = new Roi[roiIndex.length];
-        Rectangle[] boundingRectangles = new Rectangle[roiIndex.length];
+        boundingRectangles = new Rectangle[roiIndex.length];
         int[] sizes = new int[roiIndex.length];
 
         for (int i = 0; i < roiIndex.length; i++) {
@@ -145,7 +135,7 @@ public class roi_measure implements ExtendedPlugInFilter, DialogListener {
         /* Store Correlation Coefficients of ROIs */
         IJ.showStatus("Measuring Correlation Coefficients...");
 
-        double[] correlationCoefficients = new double[roiIndex.length];
+        correlationCoefficients = new double[roiIndex.length];
 
         for (int i = 0; i < roiIndex.length; i++) {
             double[] pixelIntensity1 = new double[sizes[i]];
@@ -166,23 +156,31 @@ public class roi_measure implements ExtendedPlugInFilter, DialogListener {
             correlationCoefficients[i] = correlationCoefficient(pixelIntensity1, pixelIntensity2);
         }
 
-        int count = 0;
+        count = 0;
         for (int i = 0; i < roiIndex.length; i++) {
             if (correlationCoefficients[i] > thresholdValue) {
                 count += 1;
             }
         }
 
-        Roi[] afROI = new Roi[count];
+        afROI = new Roi[count];
         int i = 0;
         for (int j = 0; j < roiIndex.length; j++) {
             if (correlationCoefficients[j] > thresholdValue)
                 afROI[i] = rois[j];
         }
 
+        return true;
+    }
+
+    public void setNPasses(int nPasses) {
+        // Not required here (I think)
+    }
+
+    public void run(ImageProcessor imp) {
         /* Remove Autofluorescent ROIs or Preview*/
         if (previewing) {
-            for (i = 0; i < count; i++) {
+            for (int i = 0; i < count; i++) {
                 imp1.setRoi(afROI[i]);
                 imp2.setRoi(afROI[i]);
             }
@@ -196,7 +194,7 @@ public class roi_measure implements ExtendedPlugInFilter, DialogListener {
             ByteProcessor bpDilatedMask = ipDilatedMask.convertToByteProcessor();
             int increaseSize = numberDilations + 10;
 
-            for (i = 0; i < roiIndex.length; i++) {
+            for (int i = 0; i < roiIndex.length; i++) {
                 if (correlationCoefficients[i] > thresholdValue) {
                     // Reset Mask
                     bpDilatedMask.setColor(0);
