@@ -14,6 +14,7 @@ import ij.gui.Roi;
 import ij.plugin.ImageCalculator;
 import ij.plugin.PlugIn;
 import ij.plugin.frame.RoiManager;
+import ij.process.ByteProcessor;
 import ij.process.ImageProcessor;
 import ij.process.ImageStatistics;
 
@@ -22,7 +23,7 @@ import java.awt.*;
 public class roi_measure implements PlugIn {
 
     private static String[] autoLocalThresholdMethod = {"Do not perform auto-local thresholding", "Bernsen", "Contrast",
-                                                        "Mean", "Median", "MidGrey", "Niblack", "Otsu", "Phansalkar", "Sauvola"};
+            "Mean", "Median", "MidGrey", "Niblack", "Otsu", "Phansalkar", "Sauvola"};
 
     public void run(String arg) {
 
@@ -92,7 +93,7 @@ public class roi_measure implements PlugIn {
             ImagePlus imp1Threshold = imp1.duplicate();
             IJ.run(imp1Threshold, "8-bit", "");
             IJ.run(imp1Threshold, "Auto Local Threshold", "method=" + autoLocalThresholdMethod[methodIndex] +
-                                   " radius=15 parameter_1=0 parameter_2=0 white");
+                    " radius=15 parameter_1=0 parameter_2=0 white");
             IJ.run(imp1Threshold, "Analyze Particles...", "size=100-10000 pixel show=Nothing clear add slice");
             RoiManager rm = RoiManager.getInstance();
             int[] roiIndex = rm.getIndexes();
@@ -355,6 +356,20 @@ public class roi_measure implements PlugIn {
 //            }
 
                 // Remove AF if overlapping with ROI in AND mask
+                ImagePlus impCh1Rd2EdgeMask = imp1.duplicate();
+                ImageProcessor ipCh1Rd2EdgeMask = impCh1Rd2EdgeMask.getProcessor();
+                ByteProcessor bpCh1Rd2EdgeMask = ipCh1Rd2EdgeMask.convertToByteProcessor();
+                bpCh1Rd2EdgeMask.setColor(0);
+                bpCh1Rd2EdgeMask.fill();
+                bpCh1Rd2EdgeMask.setColor(255);
+
+                ImagePlus impCh2Rd2EdgeMask = imp2.duplicate();
+                ImageProcessor ipCh2Rd2EdgeMask = impCh2Rd2EdgeMask.getProcessor();
+                ByteProcessor bpCh2Rd2EdgeMask = ipCh2Rd2EdgeMask.convertToByteProcessor();
+                bpCh2Rd2EdgeMask.setColor(0);
+                bpCh2Rd2EdgeMask.fill();
+                bpCh2Rd2EdgeMask.setColor(255);
+
                 ip1.setColor(is1.median);
                 for (int i = 0; i < roisCh1Rd2.length; i++) {
                     roiLoop:
@@ -363,6 +378,7 @@ public class roi_measure implements PlugIn {
                             if ((roiMasksCh1Rd2[i] == null || roiMasksCh1Rd2[i].getPixel(x,y) != 0)
                                     && ipDilatedMask.getPixelValue(boundingRectanglesCh1Rd2[i].x+x,boundingRectanglesCh1Rd2[i].y+y) != 0) {
                                 ip1.fill(roisCh1Rd2[i]);
+                                bpCh1Rd2EdgeMask.fill(roisCh1Rd2[i]);
                                 break roiLoop;
                             }
                         }
@@ -377,12 +393,48 @@ public class roi_measure implements PlugIn {
                             if ((roiMasksCh2Rd2[i] == null || roiMasksCh2Rd2[i].getPixel(x, y) != 0)
                                     && ipDilatedMask.getPixelValue(boundingRectanglesCh2Rd2[i].x+x,boundingRectanglesCh2Rd2[i].y+y) != 0) {
                                 ip2.fill(roisCh2Rd2[i]);
+                                bpCh2Rd2EdgeMask.fill(roisCh2Rd2[i]);
                                 break roiLoop;
                             }
                         }
                     }
                 }
 
+                bpCh1Rd2EdgeMask.findEdges();
+                bpCh2Rd2EdgeMask.findEdges();
+
+                for (int y = 0; y < bpCh1Rd2EdgeMask.getHeight(); y++) {
+                    for (int x = 0; x < bpCh1Rd2EdgeMask.getWidth(); x++) {
+                        if (bpCh1Rd2EdgeMask.get(x,y) != 0) {
+                            int[] surroundingPixelVals = new int[49];
+                            int j = 0;
+                            for (int y2 = -3; y2 < 4; y2++) {
+                                for (int x2 = -3; x2 < 4; x2++) {
+                                    surroundingPixelVals[j] = (int) ip1.getPixelValue(x+x2, y+y2);
+                                    j += 1;
+                                }
+                            }
+                            ip1.setColor(intmean(surroundingPixelVals));
+                            ip1.drawPixel(x,y);
+                        }
+
+                        if (bpCh2Rd2EdgeMask.get(x,y) != 0) {
+                            int[] surroundingPixelVals = new int[49];
+                            int j = 0;
+                            for (int y2 = -3; y2 < 4; y2++) {
+                                for (int x2 = -3; x2 < 4; x2++) {
+                                    surroundingPixelVals[j] = (int) ip2.getPixelValue(x+x2, y+y2);
+                                    j += 1;
+                                }
+                            }
+                            ip2.setColor(intmean(surroundingPixelVals));
+                            ip2.drawPixel(x,y);
+                        }
+                    }
+                }
+
+                impCh1Rd2EdgeMask.close();
+                impCh2Rd2EdgeMask.close();
                 impDilatedMask.close();
                 imp1Rd2Threshold.close();
                 imp2Rd2Threshold.close();
@@ -429,6 +481,14 @@ public class roi_measure implements PlugIn {
 //                ch2ipThreshold.fill(roi);
 //            }
 //        }
+    }
+
+    private static int intmean(int[] p) {
+        double sum = 0;  // sum of all the elements
+        for (int i : p) {
+            sum += i;
+        }
+        return (int) sum / p.length;
     }
 
     /* Calculate the mean pixel intensity of the ROI, ignoring -1 values */
