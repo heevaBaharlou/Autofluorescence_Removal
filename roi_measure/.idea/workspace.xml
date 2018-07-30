@@ -18,8 +18,8 @@
       <file leaf-file-name="roi_measure.java" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/src/main/java/com/mycompany/imagej/roi_measure.java">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="333">
-              <caret line="421" column="67" lean-forward="false" selection-start-line="421" selection-start-column="67" selection-end-line="421" selection-end-column="67" />
+            <state relative-caret-position="-1758">
+              <caret line="343" column="43" lean-forward="false" selection-start-line="343" selection-start-column="43" selection-end-line="343" selection-end-column="43" />
               <folding>
                 <element signature="imports" expanded="true" />
               </folding>
@@ -47,6 +47,12 @@
       <find>ch1Threshold</find>
       <find>ch2Threshold</find>
       <find>b</find>
+      <find>impDilatedMask</find>
+      <find>1</find>
+      <find>show</find>
+      <find>imp1.clos</find>
+      <find>ij.lo</find>
+      <find>show()</find>
     </findStrings>
   </component>
   <component name="GradleLocalSettings">
@@ -573,13 +579,6 @@
         </state>
       </provider>
     </entry>
-    <entry file="jar://$MAVEN_REPOSITORY$/net/imagej/ij/1.51h/ij-1.51h.jar!/ij/process/ImageProcessor.class">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="90">
-          <caret line="39" column="22" lean-forward="false" selection-start-line="39" selection-start-column="22" selection-end-line="39" selection-end-column="22" />
-        </state>
-      </provider>
-    </entry>
     <entry file="jar://$MAVEN_REPOSITORY$/net/imagej/ij/1.51h/ij-1.51h.jar!/ij/plugin/PlugIn.class">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="75">
@@ -595,10 +594,18 @@
         </state>
       </provider>
     </entry>
+    <entry file="jar://$MAVEN_REPOSITORY$/net/imagej/ij/1.51h/ij-1.51h.jar!/ij/process/ImageProcessor.class">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="418">
+          <caret line="1581" column="0" lean-forward="true" selection-start-line="1581" selection-start-column="0" selection-end-line="1581" selection-end-column="0" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
     <entry file="file://$PROJECT_DIR$/src/main/java/com/mycompany/imagej/roi_measure.java">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="333">
-          <caret line="421" column="67" lean-forward="false" selection-start-line="421" selection-start-column="67" selection-end-line="421" selection-end-column="67" />
+        <state relative-caret-position="-1758">
+          <caret line="343" column="43" lean-forward="false" selection-start-line="343" selection-start-column="43" selection-end-line="343" selection-end-column="43" />
           <folding>
             <element signature="imports" expanded="true" />
           </folding>

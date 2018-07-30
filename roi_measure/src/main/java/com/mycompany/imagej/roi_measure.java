@@ -50,7 +50,7 @@ public class roi_measure implements PlugIn {
         // gd.addNumericField("Number of Dilations:", 0, 0);
         gd.addNumericField("Number of Smooths:", 0, 0);
         gd.addNumericField("Corr. Coeff. Cutoff", 0.60, 2);
-        gd.addCheckbox("Run Twice", false);
+        gd.addCheckbox("Run Glow Removal", false);
         gd.showDialog();
         if (gd.wasCanceled())
             return;
@@ -133,7 +133,6 @@ public class roi_measure implements PlugIn {
             ImageCalculator ic = new ImageCalculator();
 
             ImagePlus impAnd = ic.run("AND create", imp1Threshold, imp2Threshold);
-            IJ.run(impAnd, "Analyze Particles...", "size=100-10000 pixel show=Nothing clear add slice");
 
             impAnd.close();
 
@@ -206,7 +205,14 @@ public class roi_measure implements PlugIn {
 //            }
 
             // Remove AF if overlapping with ROI in AND mask
-            ipDilatedMask.setColor(is1.median);
+            ImagePlus impCh1AF = imp1.duplicate();
+            IJ.run(impCh1AF, "8-bit", "");
+            ImageProcessor ipCh1AF = impCh1AF.getProcessor();
+            ipCh1AF.setColor(0);
+            ipCh1AF.fill();
+            ipCh1AF.setColor(255);
+
+            ip1.setColor(is1.median);
             for (int i = 0; i < roisCh1.length; i++) {
                 roiLoop:
                 for (int y = 0; y < boundingRectanglesCh1[i].height; y++) {
@@ -214,13 +220,21 @@ public class roi_measure implements PlugIn {
                         if ((roiMasksCh1[i] == null || roiMasksCh1[i].getPixel(x, y) != 0)
                                 && ipDilatedMask.getPixelValue(boundingRectanglesCh1[i].x+x,boundingRectanglesCh1[i].y+y) != 0) {
                             ip1.fill(roisCh1[i]);
+                            ipCh1AF.fill(roisCh1[i]);
                             break roiLoop;
                         }
                     }
                 }
             }
 
-            ipDilatedMask.setColor(is2.median);
+            ImagePlus impCh2AF = imp1.duplicate();
+            IJ.run(impCh2AF, "8-bit", "");
+            ImageProcessor ipCh2AF = impCh2AF.getProcessor();
+            ipCh2AF.setColor(0);
+            ipCh2AF.fill();
+            ipCh2AF.setColor(255);
+
+            ip2.setColor(is2.median);
             for (int i = 0; i < roisCh2.length; i++) {
                 roiLoop:
                 for (int y = 0; y < boundingRectanglesCh2[i].height; y++) {
@@ -228,6 +242,7 @@ public class roi_measure implements PlugIn {
                         if ((roiMasksCh2[i] == null || roiMasksCh2[i].getPixel(x, y) != 0)
                                 && ipDilatedMask.getPixelValue(boundingRectanglesCh2[i].x+x,boundingRectanglesCh2[i].y+y) != 0) {
                             ip2.fill(roisCh2[i]);
+                            ipCh2AF.fill(roisCh2[i]);
                             break roiLoop;
                         }
                     }
@@ -248,22 +263,9 @@ public class roi_measure implements PlugIn {
                 IJ.run(imp1Rd2Threshold, "8-bit", "");
                 IJ.run(imp1Rd2Threshold, "Auto Local Threshold", "method=" + autoLocalThresholdMethod[methodIndex] +
                         " radius=15 parameter_1=0 parameter_2=0 white");
-
-                // Channel 2
-                ImagePlus imp2Rd2Threshold = impNew1.duplicate();
-                IJ.run(imp2Rd2Threshold, "Options...", "iterations=1 count=1 black");
-                IJ.run(imp2Rd2Threshold, "8-bit", "");
-                IJ.run(imp2Rd2Threshold, "Auto Local Threshold", "method=" + autoLocalThresholdMethod[methodIndex] +
-                        " radius=15 parameter_1=0 parameter_2=0 white");
-
-                ic = new ImageCalculator();
-
-                ImagePlus impAndRd2 = ic.run("AND create", imp1Rd2Threshold, imp2Rd2Threshold);
-                IJ.run(impAndRd2, "Options...", "iterations=1 count=1 black");
-                IJ.run(impAndRd2, "Watershed", "");
-
                 IJ.run(imp1Rd2Threshold, "Watershed", "");
                 IJ.run(imp1Rd2Threshold, "Analyze Particles...", "size=0-10000 pixel show=Nothing clear add slice");
+
                 rm = RoiManager.getInstance();
                 roiIndex = rm.getIndexes();
                 ImageProcessor[] roiMasksCh1Rd2 = new ImageProcessor[roiIndex.length];
@@ -277,8 +279,15 @@ public class roi_measure implements PlugIn {
                     boundingRectanglesCh1Rd2[i] = roisCh1Rd2[i].getBounds();
                 }
 
+                // Channel 2
+                ImagePlus imp2Rd2Threshold = impNew1.duplicate();
+                IJ.run(imp2Rd2Threshold, "Options...", "iterations=1 count=1 black");
+                IJ.run(imp2Rd2Threshold, "8-bit", "");
+                IJ.run(imp2Rd2Threshold, "Auto Local Threshold", "method=" + autoLocalThresholdMethod[methodIndex] +
+                        " radius=15 parameter_1=0 parameter_2=0 white");
                 IJ.run(imp2Rd2Threshold, "Watershed", "");
                 IJ.run(imp2Rd2Threshold, "Analyze Particles...", "size=0-10000 pixel show=Nothing clear add slice");
+
                 rm = RoiManager.getInstance();
                 roiIndex = rm.getIndexes();
                 ImageProcessor[] roiMasksCh2Rd2 = new ImageProcessor[roiIndex.length];
@@ -292,158 +301,111 @@ public class roi_measure implements PlugIn {
                     boundingRectanglesCh2Rd2[i] = roisCh2Rd2[i].getBounds();
                 }
 
-                IJ.run(impAndRd2, "Analyze Particles...", "size=0-10000 pixel show=Nothing clear add slice");
-                impAndRd2.close();
-
-                rm = RoiManager.getInstance();
-                roiIndex = rm.getIndexes();
-
-                ImageProcessor[] roiMasksAndRd2 = new ImageProcessor[roiIndex.length];
-                Roi[] roisAndRd2 = new Roi[roiIndex.length];
-                Rectangle[] boundingRectanglesAndRd2 = new Rectangle[roiIndex.length];
-                int[] sizesAndRd2 = new int[roiIndex.length];
-
-                for (int i = 0; i < roiIndex.length; i++) {
-                    // Get masks, ROIs, and bounding rectangles
-                    roisAndRd2[i] = rm.getRoi(roiIndex[i]);
-                    roiMasksAndRd2[i] = roisAndRd2[i].getMask();
-                    boundingRectanglesAndRd2[i] = roisAndRd2[i].getBounds();
-                    sizesAndRd2[i] = boundingRectanglesAndRd2[i].height * boundingRectanglesAndRd2[i].width;
-                }
-
-                correlationCoefficients = new double[roiIndex.length];
-
-                for (int i = 0; i < roiIndex.length; i++) {
-                    double[] pixelIntensity1 = new double[sizesAndRd2[i]];
-                    double[] pixelIntensity2 = new double[sizesAndRd2[i]];
-                    int j = 0;
-                    for (int y = 0; y < boundingRectanglesAndRd2[i].height; y++) {
-                        for (int x = 0; x < boundingRectanglesAndRd2[i].width; x++) {
-                            if (roiMasksAndRd2[i] == null || roiMasksAndRd2[i].getPixel(x,y) != 0) {
-                                pixelIntensity1[j] = ip1Smoothed.getPixelValue(boundingRectanglesAndRd2[i].x + x,
-                                        boundingRectanglesAndRd2[i].y + y);
-                                pixelIntensity2[j] = ip2Smoothed.getPixelValue(boundingRectanglesAndRd2[i].x + x,
-                                        boundingRectanglesAndRd2[i].y + y);
-                            } else {
-                                pixelIntensity1[j] = -1;
-                                pixelIntensity2[j] = -1;
-                            }
-                            j += 1;
-                        }
-                    }
-
-                    correlationCoefficients[i] = correlationCoefficient(pixelIntensity1, pixelIntensity2);
-                }
-
-                // Generate mask of AF ROIs in AND mask
-                impDilatedMask = imp1.duplicate();
-                IJ.run(impDilatedMask, "8-bit", "");
-                ipDilatedMask = impDilatedMask.getProcessor();
-                ipDilatedMask.setColor(0);
-                ipDilatedMask.fill();
-                ipDilatedMask.setColor(255);
-
-                for (int i = 0; i < roiIndex.length; i++) {
-                    System.out.println(i);
-                    if (correlationCoefficients[i] > cutOff1) {
-                        ipDilatedMask.fill(roisAndRd2[i]);
-                    }
-                }
-
-                // Dilate mask of ROIs
-//            for (int i = 0; i < numberDilations; i++) {
-//                ipDilatedMask.dilate();
-//            }
-
-                // Remove AF if overlapping with ROI in AND mask
-                ImagePlus impCh1Rd2EdgeMask = imp1.duplicate();
-                ImageProcessor ipCh1Rd2EdgeMask = impCh1Rd2EdgeMask.getProcessor();
-                ByteProcessor bpCh1Rd2EdgeMask = ipCh1Rd2EdgeMask.convertToByteProcessor();
-                bpCh1Rd2EdgeMask.setColor(0);
-                bpCh1Rd2EdgeMask.fill();
-                bpCh1Rd2EdgeMask.setColor(255);
-
-                ImagePlus impCh2Rd2EdgeMask = imp2.duplicate();
-                ImageProcessor ipCh2Rd2EdgeMask = impCh2Rd2EdgeMask.getProcessor();
-                ByteProcessor bpCh2Rd2EdgeMask = ipCh2Rd2EdgeMask.convertToByteProcessor();
-                bpCh2Rd2EdgeMask.setColor(0);
-                bpCh2Rd2EdgeMask.fill();
-                bpCh2Rd2EdgeMask.setColor(255);
+                // Remove AF if touching with an AF ROI
+                ImagePlus impCh1Glow = impCh1AF.duplicate();
+                IJ.run(impCh1Glow, "8-bit", "");
+                ImageProcessor ipCh1Glow = impCh1Glow.getProcessor();
+                // ByteProcessor bpCh1Glow = ipCh1Glow.convertToByteProcessor();
+                ipCh1Glow.setColor(0);
+                ipCh1Glow.fill();
+                ipCh1Glow.setColor(255);
 
                 ip1.setColor(is1.median);
                 for (int i = 0; i < roisCh1Rd2.length; i++) {
+                    ImageProcessor dilatedMask = new ByteProcessor(boundingRectanglesCh1Rd2[i].width + 10, boundingRectanglesCh1Rd2[i].height + 10);
+                    if (roiMasksCh1Rd2[i] != null) {
+                        dilatedMask.insert(roiMasksCh1Rd2[i], 5, 5);
+                        dilatedMask.findEdges();
+                    } else {
+                        dilatedMask.insert(new ByteProcessor(boundingRectanglesCh1Rd2[i].width, boundingRectanglesCh1Rd2[i].height), 5, 5);
+                        dilatedMask.findEdges();
+                    }
+
                     roiLoop:
-                    for (int y = 0; y < boundingRectanglesCh1Rd2[i].height; y++) {
-                        for (int x = 0; x < boundingRectanglesCh1Rd2[i].width; x++) {
-                            if ((roiMasksCh1Rd2[i] == null || roiMasksCh1Rd2[i].getPixel(x,y) != 0)
-                                    && ipDilatedMask.getPixelValue(boundingRectanglesCh1Rd2[i].x+x,boundingRectanglesCh1Rd2[i].y+y) != 0) {
-                                ip1.fill(roisCh1Rd2[i]);
-                                bpCh1Rd2EdgeMask.fill(roisCh1Rd2[i]);
+                    for (int y = 0; y < boundingRectanglesCh1Rd2[i].height + 10; y++) {
+                        for (int x = 0; x < boundingRectanglesCh1Rd2[i].width + 10; x++) {
+                            if ((dilatedMask.getPixel(x,y) != 0)
+                                    && ipCh1AF.getPixelValue(boundingRectanglesCh1Rd2[i].x-5+x, boundingRectanglesCh1Rd2[i].y-5+y) != 0) {
+                                ipCh1Glow.fill(roisCh1Rd2[i]);
                                 break roiLoop;
                             }
                         }
                     }
                 }
 
-                ip2.setColor(is2.median);
+                ipCh1Glow.invert();
+                ipCh1Glow.dilate();
+                ipCh1Glow.dilate();
+                ipCh1Glow.invert();
+
+                IJ.run(impCh1Glow, "Analyze Particles...", "size=0-10000 pixel show=Nothing clear add slice");
+                // IJ.run(impCh1Glow, "8-bit", "");
+                rm = RoiManager.getInstance();
+                roiIndex = rm.getIndexes();
+                for (int i = 0; i < roiIndex.length; i++) {
+                    Roi glowRoi = rm.getRoi(roiIndex[i]);
+                    ip1.fill(glowRoi);
+                }
+                impCh1AF.close();
+
+
+                ImagePlus impCh2Glow = impCh2AF.duplicate();
+                IJ.run(impCh2Glow, "8-bit", "");
+                ImageProcessor ipCh2Glow = impCh2Glow.getProcessor();
+                // ByteProcessor bpCh2Glow = ipCh2Glow.convertToByteProcessor();
+                ipCh2Glow.setColor(0);
+                ipCh2Glow.fill();
+                ipCh2Glow.setColor(255);
+
                 for (int i = 0; i < roisCh2Rd2.length; i++) {
+                    ByteProcessor dilatedMask = new ByteProcessor(boundingRectanglesCh2Rd2[i].width + 10, boundingRectanglesCh2Rd2[i].height + 10);
+                    if (roiMasksCh2Rd2[i] != null) {
+                        dilatedMask.insert(roiMasksCh2Rd2[i], 5, 5);
+                        dilatedMask.findEdges();
+                    } else {
+                        dilatedMask.insert(new ByteProcessor(boundingRectanglesCh2Rd2[i].width, boundingRectanglesCh2Rd2[i].height), 5, 5);
+                        dilatedMask.findEdges();
+                    }
+
                     roiLoop:
-                    for (int y = 0; y < boundingRectanglesCh2Rd2[i].height; y++) {
-                        for (int x = 0; x < boundingRectanglesCh2Rd2[i].width; x++) {
-                            if ((roiMasksCh2Rd2[i] == null || roiMasksCh2Rd2[i].getPixel(x, y) != 0)
-                                    && ipDilatedMask.getPixelValue(boundingRectanglesCh2Rd2[i].x+x,boundingRectanglesCh2Rd2[i].y+y) != 0) {
-                                ip2.fill(roisCh2Rd2[i]);
-                                bpCh2Rd2EdgeMask.fill(roisCh2Rd2[i]);
+                    for (int y = 0; y < boundingRectanglesCh2Rd2[i].height + 10; y++) {
+                        for (int x = 0; x < boundingRectanglesCh2Rd2[i].width + 10; x++) {
+                            if ((dilatedMask.getPixel(x,y) != 0)
+                                    && ipCh2AF.getPixelValue(boundingRectanglesCh2Rd2[i].x-5+x, boundingRectanglesCh2Rd2[i].y-5+y) != 0) {
+                                ipCh2Glow.fill(roisCh1Rd2[i]);
                                 break roiLoop;
                             }
                         }
                     }
                 }
 
-                bpCh1Rd2EdgeMask.findEdges();
-                bpCh2Rd2EdgeMask.findEdges();
-
-                for (int y = 0; y < bpCh1Rd2EdgeMask.getHeight(); y++) {
-                    for (int x = 0; x < bpCh1Rd2EdgeMask.getWidth(); x++) {
-                        if (bpCh1Rd2EdgeMask.get(x,y) != 0) {
-                            int[] surroundingPixelVals = new int[49];
-                            int j = 0;
-                            for (int y2 = -3; y2 < 4; y2++) {
-                                for (int x2 = -3; x2 < 4; x2++) {
-                                    surroundingPixelVals[j] = (int) ip1.getPixelValue(x+x2, y+y2);
-                                    j += 1;
-                                }
-                            }
-                            ip1.setColor(intmean(surroundingPixelVals));
-                            ip1.drawPixel(x,y);
-                        }
-
-                        if (bpCh2Rd2EdgeMask.get(x,y) != 0) {
-                            int[] surroundingPixelVals = new int[49];
-                            int j = 0;
-                            for (int y2 = -3; y2 < 4; y2++) {
-                                for (int x2 = -3; x2 < 4; x2++) {
-                                    surroundingPixelVals[j] = (int) ip2.getPixelValue(x+x2, y+y2);
-                                    j += 1;
-                                }
-                            }
-                            ip2.setColor(intmean(surroundingPixelVals));
-                            ip2.drawPixel(x,y);
-                        }
-                    }
+                ipCh2Glow.invert();
+                ipCh2Glow.dilate();
+                ipCh2Glow.dilate();
+                ipCh2Glow.invert();
+                IJ.run(impCh2Glow, "Analyze Particles...", "size=0-10000 pixel show=Nothing clear add slice");
+                // IJ.run(impCh2Glow, "8-bit", "");
+                rm = RoiManager.getInstance();
+                roiIndex = rm.getIndexes();
+                for (int i = 0; i < roiIndex.length; i++) {
+                    Roi glowRoi = rm.getRoi(roiIndex[i]);
+                    ip2.fill(glowRoi);
                 }
+                impCh2Glow.close();
 
-                impCh1Rd2EdgeMask.close();
-                impCh2Rd2EdgeMask.close();
+                impCh1AF.close();
+                impCh2AF.close();
                 impDilatedMask.close();
                 imp1Rd2Threshold.close();
                 imp2Rd2Threshold.close();
 
-                impNew1 = new ImagePlus(titles[index1].substring(0, titles[index1].length() - 4) + "_AF_Removed.tif", ip1);
-                impNew2 = new ImagePlus(titles[index2].substring(0, titles[index2].length() - 4) + "_AF_Removed.tif", ip2);
+                impNew1 = new ImagePlus(titles[index1].substring(0, titles[index1].length() - 4) + "_AF_Glow_Removed.tif", ip1);
+                impNew2 = new ImagePlus(titles[index2].substring(0, titles[index2].length() - 4) + "_AF_Glow_Removed.tif", ip2);
                 impNew1.show();
                 impNew2.show();
             } else {
+                impCh1AF.close();
+                impCh2AF.close();
                 impNew1.show();
                 impNew2.show();
             }
@@ -481,14 +443,6 @@ public class roi_measure implements PlugIn {
 //                ch2ipThreshold.fill(roi);
 //            }
 //        }
-    }
-
-    private static int intmean(int[] p) {
-        double sum = 0;  // sum of all the elements
-        for (int i : p) {
-            sum += i;
-        }
-        return (int) sum / p.length;
     }
 
     /* Calculate the mean pixel intensity of the ROI, ignoring -1 values */
